@@ -1,0 +1,25 @@
+dreamplace/version.py
+dreamplace.egg-info
+
+*.o
+*.a
+*.pyc
+*obj*
+# *dist*
+*.so
+configure.*
+test.*
+*.svg
+*.png
+
+.vscode/
+__pycache__/
+build/
+lib/
+res/
+log/
+install/
+benchmarks/
+# thirdparty/
+
+.DS_Store

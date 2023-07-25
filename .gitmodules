@@ -1,0 +1,13 @@
+[submodule "thirdparty/pybind11"]
+	path = thirdparty/pybind11
+	url = https://gitee.com/wangzhen0518/pybind11.git
+[submodule "thirdparty/Limbo"]
+	path = thirdparty/Limbo
+	url = https://gitee.com/wangzhen0518/Limbo.git
+	branch = develop
+[submodule "thirdparty/cub"]
+	path = thirdparty/cub
+	url = https://github.com/NVlabs/cub.git
+[submodule "thirdparty/OpenTimer"]
+	path = thirdparty/OpenTimer
+	url = https://github.com/enzoleo/OpenTimer.git

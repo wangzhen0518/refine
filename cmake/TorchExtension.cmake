@@ -7,7 +7,8 @@
 # It should try to find the Python associated with the environment variable.
 find_package(Python COMPONENTS Interpreter Development)
 add_subdirectory(thirdparty/pybind11)
-
+set(Python_EXECUTABLE /home/wangzhen/miniconda3/envs/refine/bin/python) #!TODO
+message(${Python_EXECUTABLE})
 execute_process(COMMAND ${Python_EXECUTABLE} -c 
   "import torch; print(torch.__path__[0]); print(int(torch.cuda.is_available())); print(torch.__version__);" 
   OUTPUT_VARIABLE TORCH_OUTPUT OUTPUT_STRIP_TRAILING_WHITESPACE)

@@ -15,11 +15,16 @@ test.*
 .vscode/
 __pycache__/
 build/
+bin/
 lib/
 res/
 log/
 install/
 benchmarks/
+tmp/
+results/
+include/
 # thirdparty/
 
 .DS_Store
+dreamplace/ops/place_io/mytest

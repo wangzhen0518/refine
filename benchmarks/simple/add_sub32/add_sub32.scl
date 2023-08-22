@@ -1,0 +1,62 @@
+UCLA scl 1.0
+# Created	:	Jan  6 2005
+# User   	:	Gi-Joon Nam & Mehmet Yildiz at IBM Austin Research({gnam, mcan}@us.ibm.com)
+
+NumRows : 7
+
+CoreRow Horizontal
+  Coordinate    :   0
+  Height        :   100
+  Sitewidth     :    1
+  Sitespacing   :    1
+  Siteorient    :    1
+  Sitesymmetry  :    1
+End
+CoreRow Horizontal
+  Coordinate    :   100
+  Height        :   100
+  Sitewidth     :    1
+  Sitespacing   :    1
+  Siteorient    :    1
+  Sitesymmetry  :    1
+End
+CoreRow Horizontal
+  Coordinate    :   200
+  Height        :   100
+  Sitewidth     :    1
+  Sitespacing   :    1
+  Siteorient    :    1
+  Sitesymmetry  :    1
+End
+CoreRow Horizontal
+  Coordinate    :   300
+  Height        :   100
+  Sitewidth     :    1
+  Sitespacing   :    1
+  Siteorient    :    1
+  Sitesymmetry  :    1
+End
+CoreRow Horizontal
+  Coordinate    :   400
+  Height        :   100
+  Sitewidth     :    1
+  Sitespacing   :    1
+  Siteorient    :    1
+  Sitesymmetry  :    1
+End
+CoreRow Horizontal
+  Coordinate    :   500
+  Height        :   100
+  Sitewidth     :    1
+  Sitespacing   :    1
+  Siteorient    :    1
+  Sitesymmetry  :    1
+End
+CoreRow Horizontal
+  Coordinate    :   600
+  Height        :   100
+  Sitewidth     :    1
+  Sitespacing   :    1
+  Siteorient    :    1
+  Sitesymmetry  :    1
+End

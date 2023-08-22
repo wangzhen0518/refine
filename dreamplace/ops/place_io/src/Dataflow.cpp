@@ -17,25 +17,6 @@
 #define BLUE "\e[1;34m"
 #define COLOR_END "\e[0m"
 
-// 0 不在路径中
-// 1 路径中有重复 node
-// 2 路径中有重复 net
-// 3 路径中有重复 pin
-unsigned int is_inPath(std::unordered_set<unsigned int> const& node_set,
-                       std::unordered_set<unsigned int> const& net_set,
-                       std::unordered_set<unsigned int> const& pin_set,
-                       dPathNode const& node) {
-    if (node_set.find(node.endNode()->id()) != node_set.end()) {
-        return 1;
-    } else if (net_set.find(node.net()->id()) != net_set.end()) {
-        return 2;
-    } else if (pin_set.find(node.startPin()->id()) != pin_set.end() ||
-               pin_set.find(node.endPin()->id()) != pin_set.end()) {
-        return 3;
-    } else
-        return 0;
-}
-
 std::vector<dPathNode> dNode::getNeighbors(dDataflowCaler const& cdf) const {
     std::vector<dPathNode> neighbors;
     for (auto nodePinId : _node.pins()) {
@@ -103,51 +84,14 @@ void dDataflowCaler::compute() {
     computeMacro2MacroDataflow();
 }
 
-// dDataflow computeDataflowFunc(std::vector<Node> const& m_vNode,
-//                               std::vector<NodeProperty> const& m_vNodeProperty,
-//                               std::vector<Net> const& m_vNet,
-//                               std::vector<NetProperty> const& m_vNetProperty,
-//                               std::vector<Pin> const& m_vPin,
-//                               std::vector<Macro> const& m_vMacro) {
-//     for (auto const& m1 : m_vMacro) {
-//     std::vector<Node const&> s;
-//     for (auto const& mp : m1.macroPins()) {
-//         auto const& n1 = m_vNode.at(m_vPin.at(mp.id()).nodeId());
-//     }
-// }
-// 遍历所有macro
-// 访问该 macro 的所有邻居
-// 如果是 macro 则创建新 path
-// 如果是 node 则入栈
-//
-// while 栈非空
-// n = s.back()
-// for n 的所有邻居
-// if macro 则创建新 path
-// if 达到 path 长度上限, 新 node 退栈
-// if is_inPath(s, n) 则跳过该 node
-// else s.push_back(n)
-//
-// 几个终止条件
-// 1. 访问到 macro, 创建新 path, 访问该 node 的下一个邻居
-// 2. 达到 path 长度上限, 新 node 退栈
-// 3. 访问到已经访问过的 node, 跳过该 node
-// }
-
 // 根据 DFS 计算出所有 macro2macro 只经过 cell 的路径
 void dDataflowCaler::computeMacro2MacroPath() {
     unsigned int cnt = 0;
     assert(!_dNodeList.empty());
     for (dNode const& node : _dNodeList) {
         if (node.is_Macro()) {
-            std::vector<dPathNode> s;
-            std::unordered_set<unsigned int> node_set;
-            std::unordered_set<unsigned int> net_set;
-            std::unordered_set<unsigned int> pin_set;
-            dPathNode startNode(nullptr, &node, nullptr, nullptr, nullptr);
-            s.push_back(startNode);
-            node_set.insert(node.id());
-            std::vector<dPath> nodePaths = DFS(s, node_set, net_set, pin_set);
+            dStack s(node);
+            std::vector<dPath> nodePaths = DFS(s);
             _allMacro2MacroPath.insert(_allMacro2MacroPath.end(), nodePaths.begin(),
                                        nodePaths.end());
             spdlog::info("{}: macro {} has {} paths, total {} paths", cnt++, node.id(),
@@ -156,50 +100,26 @@ void dDataflowCaler::computeMacro2MacroPath() {
     }
 }
 
-// bool DFS(...){
-// if (!s.empty()) {
-// n = s.back()
-// for n 的所有邻居
-// if macro 则创建新 path
-// if 达到 path 长度上限, 新 node 退栈
-// if is_inPath(s, n) 则跳过该 node
-// else s.push_back(n); DFS(...);
-// }
-// }
-
-std::vector<dPath> dDataflowCaler::DFS(std::vector<dPathNode>& s,
-                                       std::unordered_set<unsigned int>& node_set,
-                                       std::unordered_set<unsigned int>& net_set,
-                                       std::unordered_set<unsigned int>& pin_set) {
+std::vector<dPath> dDataflowCaler::DFS(dStack& s) {
     std::vector<dPath> dPathList;
-    if (!s.empty() && s.size() < _depthMax + 1) {
-    // if (!s.empty()) {
+    if (!s.empty() && s.depth() < _depthMax) {
+        // if (!s.empty()) {
         // size=1 时，只有路径起始的 macro，所以不应该发生 s.empty() 的情况
-        dPathNode n = s.back();
+        dPathNode const& n = s.back();
         dNode const& boundary = *n.endNode();
         for (dPathNode neighborNode : boundary.getNeighbors(*this)) {
-            if (is_inPath(node_set, net_set, pin_set, neighborNode) != 0) {
+            // if (is_inPath(node_set, net_set, pin_set, neighborNode) != 0) {
+            if (s.is_inPath(neighborNode) != 0) {
                 continue;  // 跳过该 node
             } else if (neighborNode.endNode()->is_Macro()) {
-                dPath newPath(s);
+                dPath newPath(s.getPath());
                 newPath.add(neighborNode);
                 dPathList.push_back(newPath);
             } else {
-                s.push_back(neighborNode);
-                node_set.insert(neighborNode.endNode()->id());
-                net_set.insert(neighborNode.net()->id());
-                pin_set.insert(neighborNode.startPin()->id());
-                pin_set.insert(neighborNode.endPin()->id());
-
-                std::vector<dPath> nodePaths = DFS(s, node_set, net_set, pin_set);
+                s.push(neighborNode);
+                std::vector<dPath> nodePaths = DFS(s);
                 dPathList.insert(dPathList.end(), nodePaths.begin(), nodePaths.end());
-
-                dPathNode endNode = s.back();
-                node_set.erase(neighborNode.endNode()->id());
-                net_set.erase(neighborNode.net()->id());
-                pin_set.erase(neighborNode.startPin()->id());
-                pin_set.erase(neighborNode.endPin()->id());
-                s.pop_back();
+                s.pop();
             }
         }
     }

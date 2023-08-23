@@ -1,4 +1,5 @@
 #include <spdlog/spdlog.h>
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 #include <sstream>
@@ -145,11 +146,17 @@ bool readDef(DreamPlace::PlaceDB& db) {
     return true;
 }
 
-dPlaceDB genPlaceDB(int argc, char* argv[]) {
+dPlaceDB genPlaceDB(int argc, const char* argv[]) {
     using namespace DreamPlace;
 
+    char** arg_list = new char*[argc];
+    for (unsigned int i = 0; i < argc; ++i) {
+        arg_list[i] = new char[strlen(argv[i]) + 1];
+        strcpy(arg_list[i], argv[i]);
+    }
+
     dPlaceDB db;
-    db.userParam().read(argc, argv);
+    db.userParam().read(argc, arg_list);
 
     // order for reading files
     // 1. lef files
@@ -177,7 +184,9 @@ dPlaceDB genPlaceDB(int argc, char* argv[]) {
 
     // adjust input parameters
     db.adjustParams();
-
+    std::for_each(std::reverse_iterator<char**>(arg_list), std::reverse_iterator<char**>(arg_list),
+                  [](char* str) { delete[] str; });
+    delete[] arg_list;
     return db;
 }
 
@@ -192,20 +201,14 @@ void judge(dDataflow const& df1, dDataflow const& df2) {
 }
 
 void adder_32bit() {
-    // dPlaceDB db;
-    // std::pair<DreamPlace::PlaceDB::index_type, bool> o0 = db.addNode("adder0");
-    // std::pair<DreamPlace::PlaceDB::index_type, bool> o1 = db.addNode("adder1");
-    // std::pair<DreamPlace::PlaceDB::index_type, bool> m0 = db.addMacro("adder0");
-    // std::pair<DreamPlace::PlaceDB::index_type, bool> m1 = db.addMacro("adder1");
-    // std::pair<DreamPlace::PlaceDB::index_type, bool> n0 = db.addNet("n0");
-    // std::pair<DreamPlace::PlaceDB::index_type, bool> n1 = db.addNet("n1");
-    // std::pair<DreamPlace::PlaceDB::index_type, bool> n2 = db.addNet("n2");
-    // std::pair<DreamPlace::PlaceDB::index_type, bool> n3 = db.addNet("n3");
-    // std::pair<DreamPlace::PlaceDB::index_type, bool> n4 = db.addNet("n4");
-    // db.addPin("p0", db.net(n0.first), db.node(o0.first));
     int argc = 5;
-    char* argv[] = {"DREAMPlace", "--bookshelf_aux_input", "benchmarks/simple/adder32/adder32.aux",
-                    "--sort_nets_by_degree", "0"};
+    const char* argv[] = {
+        "DREAMPlace",
+        "--bookshelf_aux_input",
+        "benchmarks/simple/adder32/adder32.aux",
+        "--sort_nets_by_degree",
+        "0",
+    };
 
     dPlaceDB db = genPlaceDB(argc, argv);
 
@@ -225,8 +228,13 @@ void adder_32bit() {
 
 void add_sub_32bit() {
     int argc = 5;
-    char* argv[] = {"DREAMPlace", "--bookshelf_aux_input",
-                    "benchmarks/simple/add_sub32/add_sub32.aux", "--sort_nets_by_degree", "0"};
+    const char* argv[] = {
+        "DREAMPlace",
+        "--bookshelf_aux_input",
+        "benchmarks/simple/add_sub32/add_sub32.aux",
+        "--sort_nets_by_degree",
+        "0",
+    };
 
     dPlaceDB db = genPlaceDB(argc, argv);
 
@@ -246,17 +254,17 @@ void add_sub_32bit() {
 
 void decode() {
     int argc = 11;
-    char* argv[] = {"DREAMPlace",
-                    "--lef_input",
-                    "benchmarks/ispd2015/mgc_fft_1/tech.lef",
-                    "--lef_input",
-                    "benchmarks/ispd2015/mgc_fft_1/cells.lef",
-                    "--def_input",
-                    "benchmarks/ispd2015/mgc_fft_1/floorplan.def",
-                    "--verilog_input",
-                    "benchmarks/ispd2015/mgc_fft_1/design.v",
-                    "--sort_nets_by_degree",
-                    "0"};
+    const char* argv[] = {"DREAMPlace",
+                          "--lef_input",
+                          "benchmarks/ispd2015/mgc_fft_1/tech.lef",
+                          "--lef_input",
+                          "benchmarks/ispd2015/mgc_fft_1/cells.lef",
+                          "--def_input",
+                          "benchmarks/ispd2015/mgc_fft_1/floorplan.def",
+                          "--verilog_input",
+                          "benchmarks/ispd2015/mgc_fft_1/design.v",
+                          "--sort_nets_by_degree",
+                          "0"};
 
     dPlaceDB db = genPlaceDB(argc, argv);
 
@@ -277,11 +285,14 @@ char* strcat_n(const char* s1, const char* s2) {
 
 void ispd2005(const char* benchmark, int depth) {
     int argc = 5;
-    char* dir = strcat_n("benchmarks/ispd2005/", benchmark);
+    std::stringstream dir_stream;
+    dir_stream << "benchmarks/ispd2005/" << benchmark;
 
-    char* aux_file = new char[strlen(dir) + 1 + strlen(benchmark) + 1 + strlen(".aux")];
-    sprintf(aux_file, "%s/%s.aux", dir, benchmark);
-    char* argv[] = {"DREAMPlace", "--bookshelf_aux_input", aux_file, "--sort_nets_by_degree", "0"};
+    std::stringstream aux_stream;
+    aux_stream << dir_stream.str() << "/" << benchmark << ".aux";
+    std::string aux_file = aux_stream.str();
+    const char* argv[] = {"DREAMPlace", "--bookshelf_aux_input", aux_file.c_str(),
+                          "--sort_nets_by_degree", "0"};
 
     dPlaceDB db = genPlaceDB(argc, argv);
 
@@ -290,64 +301,54 @@ void ispd2005(const char* benchmark, int depth) {
     cdf.compute();
     spdlog::info("end calculate dataflow\n");
 
-    // spdlog::info("print macro2macro dataflow");
-    // cdf.printMacro2MacroFlow();
     std::stringstream csv_stream;
-    csv_stream << dir << "/macro2macro_d" << depth << ".csv";
+    csv_stream << dir_stream.str() << "/macro2macro_d" << depth << ".csv";
     spdlog::info("write macro2macro dataflow");
     cdf.writeMacro2MacroFlow(csv_stream.str());
-
-    delete[] dir;
-    delete[] aux_file;
 }
 
-void ispd2015(const char* benchmark) {
+void ispd2015(const char* benchmark, unsigned int depth) {
     int argc = 11;
-    char* dir = strcat_n("benchmarks/ispd2015/", benchmark);
+    std::stringstream dir_stream;
+    dir_stream << "benchmarks/ispd2015/" << benchmark;
 
-    char* tech_file = strcat_n(dir, "/tech.lef");
-    char* cells_file = strcat_n(dir, "/cells.lef");
-    char* floorplan_file = strcat_n(dir, "/floorplan.lef");
-    char* design_file = strcat_n(dir, "/design.lef");
+    std::stringstream tech_stream;
+    std::stringstream cells_stream;
+    std::stringstream floorplan_stream;
+    std::stringstream design_stream;
+    tech_stream << dir_stream.str() << "/tech.lef";
+    cells_stream << dir_stream.str() << "/cells.lef";
+    floorplan_stream << dir_stream.str() << "/floorplan.def";
+    design_stream << dir_stream.str() << "/design.v";
+    
+    std::string tech_file = tech_stream.str();
+    std::string cells_file = cells_stream.str();
+    std::string floorplan_file = floorplan_stream.str();
+    std::string design_file = design_stream.str();
 
-    char* argv[] = {"DREAMPlace",
-                    "--lef_input",
-                    tech_file,
-                    "--lef_input",
-                    cells_file,
-                    "--def_input",
-                    floorplan_file,
-                    "--verilog_input",
-                    design_file,
-                    "--sort_nets_by_degree",
-                    "0"};
+    const char* argv[] = {"DREAMPlace",
+                          "--lef_input",
+                          tech_file.c_str(),
+                          "--lef_input",
+                          cells_file.c_str(),
+                          "--def_input",
+                          floorplan_file.c_str(),
+                          "--verilog_input",
+                          design_file.c_str(),
+                          "--sort_nets_by_degree",
+                          "0"};
 
-    dPlaceDB db;
-    db.userParam().read(argc, argv);
-
-    spdlog::info("start read bookshelf");
-    bool flag;
-    flag = readBookshelf(db);
-    db.adjustParams();
-    spdlog::info("end read bookshelf\n");
+    dPlaceDB db = genPlaceDB(argc, argv);
 
     spdlog::info("start calculate dataflow\n");
-    dDataflowCaler cdf(db, 3);
+    dDataflowCaler cdf(db, depth);
     cdf.compute();
     spdlog::info("end calculate dataflow\n");
 
-    // spdlog::info("print macro2macro dataflow");
-    // cdf.printMacro2MacroFlow();
-    char* csv_file = strcat_n(dir, "/macro2macro.csv");
+    std::stringstream csv_stream;
+    csv_stream << dir_stream.str() << "/macro2macro_d" << depth << ".csv";
     spdlog::info("write macro2macro dataflow");
-    cdf.writeMacro2MacroFlow(csv_file);
-
-    delete[] csv_file;
-    delete[] design_file;
-    delete[] floorplan_file;
-    delete[] cells_file;
-    delete[] tech_file;
-    delete[] dir;
+    cdf.writeMacro2MacroFlow(csv_stream.str());
 }
 
 int main(int argc, char* argv[]) {
@@ -360,8 +361,8 @@ int main(int argc, char* argv[]) {
     if (argc == 3) {
         depth = atoi(argv[2]);
     }
-    ispd2005(benchmark, depth);
-    // ispd2015(argv[1]);
+    // ispd2005(benchmark, depth);
+    ispd2015(benchmark, depth);
     // decode();
 
     int x = 10;

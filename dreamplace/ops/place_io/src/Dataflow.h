@@ -43,7 +43,12 @@ class dNode {
             this->_is_Register = false;
         }
     }
-    void setRegister(bool _is_Register) { this->_is_Register = _is_Register; }
+    void setRegister(bool _is_Register) {
+        this->_is_Register = _is_Register;
+        if (_is_Register) {
+            this->_is_Macro = false;
+        }
+    }
     bool operator<(dNode const& rhs) const { return this->id() < rhs.id(); }
 
   public:
@@ -126,7 +131,9 @@ class dPath {
         _dPathNodeList.push_back(n);
     }
     std::vector<dPathNode> const& get() const { return _dPathNodeList; }
-    unsigned int length() const { return _dPathNodeList.size(); }
+    unsigned int length() const {
+        return _depth + 2;  // +2 是考虑到两端的 macro
+    }
     dNode const& startNode() const {
         assert(!_dPathNodeList.empty());
         return *_dPathNodeList.front().endNode();
@@ -198,11 +205,12 @@ class dStack {
         assert(!_stack.empty());
         return _stack.back();
     }
+    /**
+     * @brief 判断 node 是否在路径中
+     * @param node
+     * @return 0 不在路径中，1 路径中有重复 node，2 路径中有重复 net，3 路径中有重复 pin
+     */
     unsigned int is_inPath(dPathNode const& node) {
-        // 0 不在路径中
-        // 1 路径中有重复 node
-        // 2 路径中有重复 net
-        // 3 路径中有重复 pin
         if (_node_set.find(node.endNode()->id()) != _node_set.end()) {
             return 1;
         } else if (_net_set.find(node.net()->id()) != _net_set.end()) {

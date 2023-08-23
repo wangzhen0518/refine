@@ -70,4 +70,6 @@ class dPlaceDB : public DreamPlace::PlaceDB {
         m_vFixedNodeIndex = fixedNodeIndex;
         m_numFixed = m_vFixedNodeIndex.size();
     }
+
+    // bool read(int argc, char** argv) { return this->userParam().read(argc, argv); }
 };

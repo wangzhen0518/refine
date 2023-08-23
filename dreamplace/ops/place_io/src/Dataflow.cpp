@@ -61,14 +61,17 @@ void dPath::printPath() const {
 }
 
 void dDataflowCaler::dNodeInit() {
-    for (auto const& node : _db.nodes()) {
+    for (DreamPlace::Node const& node : _db.nodes()) {
         _dNodeList.push_back(dNode(node, _db));
     }
-    for (unsigned int i = 0; i < _db.fixedNodeIndices().size(); ++i) {
-        unsigned int fixedId = _db.fixedNodeIndices().at(i);
-        _dNodeList.at(fixedId).setMacro(true, i);
+    if (_db.macros().size() >= _db.nodes().size()) {  // TODO ispd2005 不完善
+        for (unsigned int i = 0; i < _db.fixedNodeIndices().size(); ++i) {
+            unsigned int fixedId = _db.fixedNodeIndices().at(i);
+            _dNodeList.at(fixedId).setMacro(true, i);
+        }
+        _numMacro = _db.numFixed();
+    } else {
     }
-    _numMacro = _db.numFixed();
 }
 
 void dDataflowCaler::compute() {
@@ -129,11 +132,11 @@ std::vector<dPath> dDataflowCaler::DFS(dStack& s) {
 void dDataflowCaler::computeMacro2MacroDataflow() {
     // 初始化 _dMacro2MacroFlow
     _dMacro2MacroFlow.resize(_numMacro);
-    for (auto& line : _dMacro2MacroFlow) {
+    for (std::vector<double>& line : _dMacro2MacroFlow) {
         line.resize(_numMacro, 0);
     }
     // 遍历所有 macro2macro path
-    for (auto const& p : _allMacro2MacroPath) {
+    for (dPath const& p : _allMacro2MacroPath) {
         unsigned int k = p.length() - 2;  // 此处路径长度不计算两端的 macro
         assert(k >= 0);
         dNode const& start = p.startNode();
@@ -161,7 +164,7 @@ void dDataflowCaler::printMacro2MacroFlow() const {
 void dDataflowCaler::printMacro2MacroPath() const {
     unsigned width = 3;
     unsigned i = 0;
-    for (auto const& p : _allMacro2MacroPath) {
+    for (dPath const& p : _allMacro2MacroPath) {
         std::cout << "Path" << std::setw(width) << i++ << ": ";
         p.printPath();
         unsigned int k = p.length() - 2;  // 此处路径长度不计算两端的 macro
@@ -172,7 +175,7 @@ void dDataflowCaler::printMacro2MacroPath() const {
 
 void dDataflowCaler::writeMacro2MacroFlow(std::string const& filename) const {
     std::ofstream fw(filename);
-    for (auto const& line : _dMacro2MacroFlow) {
+    for (std::vector<double> const& line : _dMacro2MacroFlow) {
         for (unsigned int i = 0; i < line.size() - 1; ++i) {
             fw << line.at(i) << ",";
         }

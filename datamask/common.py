@@ -10,4 +10,4 @@ grid_setting = {
     "ariane": {"grid_num": 357, "grid_size": 1},
 }
 
-my_inf = 999999999999
+my_inf = 1e12

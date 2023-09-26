@@ -67,13 +67,17 @@ add_library(${TARGET_NAME}_cpp_so SHARED
   src/PlaceDB.cpp  
   src/DefWriter.cpp
   src/BookshelfWriter.cpp
-  src/Dataflow.cpp)
+  src/Dataflow.cpp
+  )
 target_include_directories(${TARGET_NAME}_cpp_so PRIVATE ${INCLUDE_DIRS})
 target_link_libraries(${TARGET_NAME}_cpp_so PRIVATE ${LINK_LIBS} ${TORCH_LIBRARIES})
 
 install(TARGETS 
   ${TARGET_NAME}_cpp_so 
   DESTINATION dreamplace/ops/${OP_NAME})
+install(TARGETS 
+  ${TARGET_NAME}_cpp_so 
+  DESTINATION .)
 
 add_pytorch_extension(${TARGET_NAME}_cpp 
   src/PyPlaceDB.cpp  

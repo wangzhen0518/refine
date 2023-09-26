@@ -15,6 +15,7 @@ test.*
 __pycache__/
 build/
 lib/
+build_ori/
 res/
 # log/
 install/

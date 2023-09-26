@@ -3,11 +3,27 @@
 # @author Yibo Lin
 # @date   Aug 2018
 #
+import os
+import sys
 
 from torch.autograd import Function
 
+root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
+
 import dreamplace.ops.place_io.place_io_cpp as place_io_cpp
-from dreamplace.ops.place_io.place_io_cpp import SolutionFileFormat, Direction1DType, Direction2DType, OrientEnum, PlaceStatusEnum, MultiRowAttrEnum, SignalDirectEnum, PlanarDirectEnum, RegionTypeEnum
+from dreamplace.ops.place_io.place_io_cpp import (
+    SolutionFileFormat,
+    Direction1DType,
+    Direction2DType,
+    OrientEnum,
+    PlaceStatusEnum,
+    MultiRowAttrEnum,
+    SignalDirectEnum,
+    PlanarDirectEnum,
+    RegionTypeEnum,
+)
 
 
 class PlaceIOFunction(Function):
@@ -32,34 +48,33 @@ class PlaceIOFunction(Function):
         if "sort_nets_by_degree" in params.__dict__:
             args += " --sort_nets_by_degree %s" % (params.sort_nets_by_degree)
 
-        return place_io_cpp.forward(args.split(' '))
+        return place_io_cpp.forward(args.split(" "))
 
     @staticmethod
     def pydb(raw_db):
         """
-        @brief convert to python database 
-        @param raw_db original placement database 
+        @brief convert to python database
+        @param raw_db original placement database
         """
         return place_io_cpp.pydb(raw_db)
 
     @staticmethod
     def write(raw_db, filename, sol_file_format, node_x, node_y):
         """
-        @brief write solution in specific format 
-        @param raw_db original placement database 
-        @param filename output file 
+        @brief write solution in specific format
+        @param raw_db original placement database
+        @param filename output file
         @param sol_file_format solution file format, DEF|DEFSIMPLE|BOOKSHELF|BOOKSHELFALL
-        @param node_x x coordinates of cells, only need movable cells; if none, use original position 
+        @param node_x x coordinates of cells, only need movable cells; if none, use original position
         @param node_y y coordinates of cells, only need movable cells; if none, use original position
         """
-        return place_io_cpp.write(raw_db, filename, sol_file_format, node_x,
-                                  node_y)
+        return place_io_cpp.write(raw_db, filename, sol_file_format, node_x, node_y)
 
     @staticmethod
     def apply(raw_db, node_x, node_y):
         """
-        @brief apply solution 
-        @param raw_db original placement database 
+        @brief apply solution
+        @param raw_db original placement database
         @param node_x x coordinates of cells, only need movable cells
         @param node_y y coordinates of cells, only need movable cells
         """

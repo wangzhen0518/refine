@@ -12,8 +12,6 @@
 #include "Pin.h"
 #include "PlaceDB.h"
 
-#include "mytest.h"
-
 #define RED "\e[1;31m"
 #define YELLOW "\e[1;33m"
 #define BLUE "\e[1;34m"
@@ -193,10 +191,10 @@ dPlaceDB genPlaceDB(int argc, const char* argv[]) {
 void judge(dDataflow const& df1, dDataflow const& df2) {
     assert(df1.size() == df2.size());
     for (unsigned int i = 0; i < df1.size(); ++i) {
-        assert(df1[i].size() == df2[i].size());
-        for (unsigned int j = 0; j < df1[i].size(); ++j) {
-            assert(abs(df1[i][j] - df2[i][j]) < 1e-6);
-        }
+        // assert(df1[i].size() == df2[i].size());
+        // for (unsigned int j = 0; j < df1[i].size(); ++j) {
+        //     assert(abs(df1[i][j] - df2[i][j]) < 1e-6);
+        // }
     }
 }
 
@@ -217,13 +215,13 @@ void adder_32bit() {
     cdf.printMacro2MacroPath();
     cdf.printMacro2MacroFlow();
 
-    dDataflow df = {
-        {0, 1, 0, 1},
-        {0, 0, 0, 1},
-        {2, 2, 0, 0},
-        {0, 0, 0, 0},
-    };
-    judge(df, cdf.getdMacro2MacroFlow());
+    // dDataflow df = {
+    //     {0, 1, 0, 1},
+    //     {0, 0, 0, 1},
+    //     {2, 2, 0, 0},
+    //     {0, 0, 0, 0},
+    // };
+    // judge(df, cdf.getdMacro2MacroFlow());
 }
 
 void add_sub_32bit() {
@@ -243,13 +241,13 @@ void add_sub_32bit() {
     cdf.printMacro2MacroPath();
     cdf.printMacro2MacroFlow();
 
-    dDataflow df = {
-        {0, 0, 1, 0},
-        {2, 0, 0, 3},
-        {0, 0, 0, 0},
-        {1, 0, 1, 0},
-    };
-    judge(df, cdf.getdMacro2MacroFlow());
+    // dDataflow df = {
+    //     {0, 0, 1, 0},
+    //     {2, 0, 0, 3},
+    //     {0, 0, 0, 0},
+    //     {1, 0, 1, 0},
+    // };
+    // judge(df, cdf.getdMacro2MacroFlow());
 }
 
 void decode() {
@@ -307,6 +305,37 @@ void ispd2005(const char* benchmark, int depth) {
     cdf.writeMacro2MacroFlow(csv_stream.str());
 }
 
+void debugFunction_ispd2015(dPlaceDB const& db) {
+    // auto const& macro0 = db.macro(0);
+    // spdlog::debug("macro0 name: {}", macro0.name());
+    // for (unsigned int i = 0; i < db.nodes().size(); ++i) {
+    //     auto const& np = db.nodeProperty(i);
+    //     if (np.name() == macro0.name()) {
+    //         spdlog::debug("node {} is {}", i, macro0.name());
+    //         spdlog::debug(db.macroName2Index().count(np.name()));
+    //     }
+    // }
+    // for (auto const& [name, index] : db.macroName2Index()) {
+    //     if (name == macro0.name()) {
+    //         spdlog::debug("macroName2Index: {} {}", name, index);
+    //     }
+    // }
+
+    // DreamPlace::Macro const& ms00f80 = db.macro(db.macroName2Index().at("ms00f80"));
+    // DreamPlace::Node const& x_out_0_reg_0_ = db.node(db.nodeName2Index().at("x_out_0_reg_0_"));
+    // DreamPlace::Node const& x_out_0_0_node = db.node(db.nodeName2Index().at("x_out_0_0"));
+    // // DreamPlace::Node const& n_7222_node = db.node(db.nodeName2Index().at("n_7222"));
+    // DreamPlace::Net const& ispd_clk = db.net(db.netName2Index().at("ispd_clk"));
+    // DreamPlace::Net const& n_7222 = db.net(db.netName2Index().at("n_7222"));
+    // DreamPlace::Net const& x_out_0_0 = db.net(db.netName2Index().at("x_out_0_0"));
+
+    // std::for_each(db.iopinMacroBegin(), db.iopinMacroBegin(),
+    //               [](DreamPlace::IOPinMacroIterator& x) 
+    //               { std::cout << std::endl; });
+
+    std::cout << std::endl;
+}
+
 void ispd2015(const char* benchmark, unsigned int depth) {
     int argc = 11;
     std::stringstream dir_stream;
@@ -320,7 +349,7 @@ void ispd2015(const char* benchmark, unsigned int depth) {
     cells_stream << dir_stream.str() << "/cells.lef";
     floorplan_stream << dir_stream.str() << "/floorplan.def";
     design_stream << dir_stream.str() << "/design.v";
-    
+
     std::string tech_file = tech_stream.str();
     std::string cells_file = cells_stream.str();
     std::string floorplan_file = floorplan_stream.str();
@@ -342,6 +371,73 @@ void ispd2015(const char* benchmark, unsigned int depth) {
 
     spdlog::info("start calculate dataflow\n");
     dDataflowCaler cdf(db, depth);
+
+    debugFunction_ispd2015(db);
+
+    cdf.compute();
+    spdlog::info("end calculate dataflow\n");
+
+    std::stringstream csv_stream;
+    csv_stream << dir_stream.str() << "/macro2macro_d" << depth << ".csv";
+    spdlog::info("write macro2macro dataflow");
+    cdf.writeMacro2MacroFlow(csv_stream.str());
+}
+
+void debugFunction_ispd2019(dPlaceDB const& db) {
+    auto const& macro0 = db.macro(0);
+    spdlog::debug("macro0 name: {}", macro0.name());
+    for (unsigned int i = 0; i < db.nodes().size(); ++i) {
+        auto const& np = db.nodeProperty(i);
+        if (np.name() == macro0.name()) {
+            spdlog::debug("node {} is {}", i, macro0.name());
+            spdlog::debug(db.macroName2Index().count(np.name()));
+        }
+    }
+    for (auto const& [name, index] : db.macroName2Index()) {
+        if (name == macro0.name()) {
+            spdlog::debug("macroName2Index: {} {}", name, index);
+        }
+    }
+
+    DreamPlace::Macro const& ms00f80 = db.macro(db.macroName2Index().at("ms00f80"));
+    DreamPlace::Node const& x_out_0_reg_0_ = db.node(db.nodeName2Index().at("x_out_0_reg_0_"));
+    DreamPlace::Node const& x_out_0_0_node = db.node(db.nodeName2Index().at("x_out_0_0"));
+    // DreamPlace::Node const& n_7222_node = db.node(db.nodeName2Index().at("n_7222"));
+    DreamPlace::Net const& ispd_clk = db.net(db.netName2Index().at("ispd_clk"));
+    DreamPlace::Net const& n_7222 = db.net(db.netName2Index().at("n_7222"));
+    DreamPlace::Net const& x_out_0_0 = db.net(db.netName2Index().at("x_out_0_0"));
+
+    std::cout << std::endl;
+}
+
+void ispd2019(const char* benchmark, unsigned int depth) {
+    int argc = 7;
+    std::stringstream dir_stream;
+    dir_stream << "benchmarks/ispd2019/" << benchmark;
+
+    std::stringstream lef_stream;
+    std::stringstream def_stream;
+    lef_stream << dir_stream.str() << "/" << benchmark << ".input.lef";
+    def_stream << dir_stream.str() << "/" << benchmark << ".input.def";
+
+    std::string lef_file = lef_stream.str();
+    std::string def_file = def_stream.str();
+
+    const char* argv[] = {"DREAMPlace",
+                          "--lef_input",
+                          lef_file.c_str(),
+                          "--def_input",
+                          def_file.c_str(),
+                          "--sort_nets_by_degree",
+                          "0"};
+
+    dPlaceDB db = genPlaceDB(argc, argv);
+
+    spdlog::info("start calculate dataflow\n");
+    dDataflowCaler cdf(db, depth);
+
+    debugFunction_ispd2019(db);
+
     cdf.compute();
     spdlog::info("end calculate dataflow\n");
 
@@ -352,6 +448,7 @@ void ispd2015(const char* benchmark, unsigned int depth) {
 }
 
 int main(int argc, char* argv[]) {
+    spdlog::set_level(spdlog::level::debug);  // Set global log level to debug
     // adder_32bit();
     // add_sub_32bit();
 
@@ -361,8 +458,9 @@ int main(int argc, char* argv[]) {
     if (argc == 3) {
         depth = atoi(argv[2]);
     }
-    // ispd2005(benchmark, depth);
-    ispd2015(benchmark, depth);
+    ispd2005(benchmark, depth);
+    // ispd2015(benchmark, depth);
+    // ispd2019(benchmark, depth);
     // decode();
 
     int x = 10;

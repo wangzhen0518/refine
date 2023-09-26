@@ -10,16 +10,10 @@
 #include "Net.h"
 #include "Node.h"
 #include "Pin.h"
-#include "PlaceDB.h"
-
-#define RED "\e[1;31m"
-#define YELLOW "\e[1;33m"
-#define BLUE "\e[1;34m"
-#define COLOR_END "\e[0m"
 
 std::vector<dPathNode> dNode::getNeighbors(dDataflowCaler const& cdf) const {
     std::vector<dPathNode> neighbors;
-    for (auto nodePinId : _node.pins()) {
+    for (auto nodePinId : _pinIdList) {
         DreamPlace::Pin const& nodePin = _db.pin(nodePinId);
         if (nodePin.direct().value() == DreamPlace::SignalDirectEnum::OUTPUT) {
             DreamPlace::Net const& net = _db.net(nodePin.netId());
@@ -27,7 +21,7 @@ std::vector<dPathNode> dNode::getNeighbors(dDataflowCaler const& cdf) const {
                 DreamPlace::Pin const& netPin = _db.pin(netPinId);
                 if (netPin.direct().value() == DreamPlace::SignalDirectEnum::INPUT) {
                     dNode const& neighborNode = cdf.node(netPin.nodeId());
-                    if (neighborNode.id() != _node.id()) {
+                    if (neighborNode.node_id() != _node_id) {
                         dPathNode pn = dPathNode(this, &neighborNode, &net, &nodePin, &netPin);
                         neighbors.push_back(pn);
                     }
@@ -42,8 +36,7 @@ void dPath::printPath() const {
     const unsigned int width = 2;
     for (dPathNode const& n : _dPathNodeList) {
         if (n.is_start()) {
-            std::cout << RED << "Node(" << std::setw(width) << n.endNode()->id() << ")"
-                      << COLOR_END;
+            n.endNode()->print_node();
         } else {
             std::cout << ":";
             std::cout << YELLOW << "Pin(" << std::setw(width) << n.startPin()->id() << ")"
@@ -54,40 +47,60 @@ void dPath::printPath() const {
             std::cout << YELLOW << "Pin(" << std::setw(width) << n.endPin()->id() << ")"
                       << COLOR_END;
             std::cout << ":";
-            std::cout << RED << "Node(" << std::setw(width) << n.endNode()->id() << ")"
-                      << COLOR_END;
+            n.endNode()->print_node();
         }
     }
 }
 
 void dDataflowCaler::dNodeInit() {
-    for (DreamPlace::Node const& node : _db.nodes()) {
-        _dNodeList.push_back(dNode(node, _db));
+    spdlog::info("start dNodeInit");
+
+    for (unsigned int i = 0; i < _db.nodes().size(); ++i) {
+        _dNodeList.push_back(dNode(_db.node(i), _db.nodeProperty(i).name(), _db));
     }
+
+    _numRegister = _numMacro = _numIOPin = 0;
     if (_db.macros().size() >= _db.nodes().size()) {  // TODO ispd2005 不完善
         for (unsigned int i = 0; i < _db.fixedNodeIndices().size(); ++i) {
             unsigned int fixedId = _db.fixedNodeIndices().at(i);
-            _dNodeList.at(fixedId).setMacro(true, i);
+            _dNodeList.at(fixedId).setMacro(i);
         }
+        _numRegister = _db.numMovable();
         _numMacro = _db.numFixed();
     } else {
+        for (unsigned int i = 0; i < _dNodeList.size(); ++i) {
+            _dNodeList[i].setNodeId(i);
+            switch (_dNodeList[i].type()) {
+                case dNodeType::Register:
+                    _numRegister++;
+                    break;
+                case dNodeType::Macro: {
+                    _dNodeList[i].setMacroId(_numMacro);
+                    _numMacro++;
+                } break;
+                case dNodeType::IOPin:
+                    _numIOPin++;
+                    break;
+            }
+        }
     }
 }
 
 void dDataflowCaler::compute() {
     // 初始化所有 dNode，关键在于初始化 _isMacro
     if (_dNodeList.empty()) {
-        spdlog::info("start dNodeInit");
         dNodeInit();
     }
     spdlog::info("macro num: {}", _numMacro);
+
     spdlog::info("start computeMacro2MacroPath");
     computeMacro2MacroPath();
+
     spdlog::info("start computeMacro2MacroDataflow");
     computeMacro2MacroDataflow();
 }
 
-// 根据 DFS 计算出所有 macro2macro 只经过 cell 的路径
+// 根据 DFS 计算出所有 macro2macro 只经过 register 和 cell 的路径
 void dDataflowCaler::computeMacro2MacroPath() {
     unsigned int cnt = 0;
     assert(!_dNodeList.empty());
@@ -97,7 +110,7 @@ void dDataflowCaler::computeMacro2MacroPath() {
             std::vector<dPath> nodePaths = DFS(s);
             _allMacro2MacroPath.insert(_allMacro2MacroPath.end(), nodePaths.begin(),
                                        nodePaths.end());
-            spdlog::info("{}: macro {} has {} paths, total {} paths", cnt++, node.id(),
+            spdlog::info("{}: macro {} has {} paths, total {} paths", cnt++, node.node_id(),
                          nodePaths.size(), _allMacro2MacroPath.size());
         }
     }
@@ -112,7 +125,7 @@ std::vector<dPath> dDataflowCaler::DFS(dStack& s) {
         dNode const& boundary = *n.endNode();
         for (dPathNode neighborNode : boundary.getNeighbors(*this)) {
             // if (is_inPath(node_set, net_set, pin_set, neighborNode) != 0) {
-            if (s.is_inPath(neighborNode) != 0) {
+            if (s.is_inPath(neighborNode) != 0 || neighborNode.endNode()->is_IOPin()) {
                 continue;  // 跳过该 node
             } else if (neighborNode.endNode()->is_Macro()) {
                 dPath newPath(s.getPath());
@@ -135,6 +148,11 @@ void dDataflowCaler::computeMacro2MacroDataflow() {
     for (std::vector<double>& line : _dMacro2MacroFlow) {
         line.resize(_numMacro, 0);
     }
+    // for (auto const& node1 : _dNodeList) {
+    //     for (auto const& node2 : _dNodeList) {
+    //         _dMacro2MacroFlow[node1.name()][node2.name()] = 0.0;
+    //     }
+    // }
     // 遍历所有 macro2macro path
     for (dPath const& p : _allMacro2MacroPath) {
         unsigned int k = p.length() - 2;  // 此处路径长度不计算两端的 macro
@@ -142,6 +160,7 @@ void dDataflowCaler::computeMacro2MacroDataflow() {
         dNode const& start = p.startNode();
         dNode const& end = p.endNode();
         _dMacro2MacroFlow.at(start.macro_id()).at(end.macro_id()) += powf64(0.5, k);
+        // _dMacro2MacroFlow[start.name()][end.name()] += powf64(0.5, k);
     }
 }
 
@@ -156,6 +175,9 @@ void dDataflowCaler::printMacro2MacroFlow() const {
         std::cout << std::setw(width) << _db.fixedNodeIndices().at(i);
         for (unsigned j = 0; j < _numMacro; ++j) {
             std::cout << std::setw(width) << _dMacro2MacroFlow.at(i).at(j);
+            // std::string node_name1 = _dNodeList.at(i).name();
+            // std::string node_name2 = _dNodeList.at(j).name();
+            // std::cout << std::setw(width) << _dMacro2MacroFlow[node_name1][node_name2];
         }
         std::cout << std::endl;
     }
@@ -175,11 +197,28 @@ void dDataflowCaler::printMacro2MacroPath() const {
 
 void dDataflowCaler::writeMacro2MacroFlow(std::string const& filename) const {
     std::ofstream fw(filename);
-    for (std::vector<double> const& line : _dMacro2MacroFlow) {
-        for (unsigned int i = 0; i < line.size() - 1; ++i) {
-            fw << line.at(i) << ",";
+    for (auto const& node : _dNodeList) {
+        if (node.is_Macro())
+            fw << "," << node.name();
+    }
+    fw << std::endl;
+    // for (auto const& node1 : _dNodeList) {
+    //     fw << node1.name();
+    //     for (auto const& node2 : _dNodeList) {
+    //         fw << "," << _dMacro2MacroFlow[node1.name()][node2.name()];
+    //     }
+    //     fw << std::endl;
+    // }
+    int mi = 0;
+    for (auto const& line : _dMacro2MacroFlow) {
+        while (!_dNodeList[mi].is_Macro())  // 找到 line 对应的 macro
+            ++mi;
+        fw << _dNodeList[mi].name();
+        for (double df : line) {
+            fw << "," << df;
         }
-        fw << line.back() << std::endl;
+        fw << std::endl;
+        ++mi;
     }
     fw.close();
 }

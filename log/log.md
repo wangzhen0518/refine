@@ -22,7 +22,53 @@
 
 TODO:
 
-1. ispd 2005 和 ispd 2015 判断节点是否是 macro 的方式不同，需要修改。
-2. 是否可以根据 node 名称中是否存在 reg 判断 node 是否是寄存器？ 待确认
-3. m_vNode 中是否包含 m_vMacro 中的点
-4. m_vMacro 的引脚如何处理
+-   [x] ispd 2005 和 ispd 2015 判断节点是否是 macro 的方式不同，需要修改。
+-   [x] 是否可以根据 node 名称中是否存在 reg 判断 node 是否是寄存器？ 待确认
+-   [x] m_vNode 中是否包含 m_vMacro 中的点
+-   [x] m_vMacro 的引脚如何处理
+
+## August 23 Wed, 2023
+
+23:44
+
+1. 总共有 3 类元件，cell, macro, iopin，其中 cell 包含 register 和组合元件，这三类元件都需要抽象成同一个数据结构 dNode
+2. DreamPlace 中的 macro 数组同时存储了 macro 和 iopin
+3. DreamPlace 中的 node 数组同时存储了 cell 和 iopin
+4. 所以 macro 和 cell 不具有相同的数据结构，需要分别进行处理
+5. macro 的引脚需要单独处理，这个是重点
+6. 完成了寄存器的判断
+7. 目前的代码实现中，错误的认为 DreamPlace 的 node 数组存储了 macro，相应的逻辑是错误的
+
+TODO
+
+-   [x] 抽象 macro 为 dNode
+-   [x] 处理 macro 的引脚
+
+## August 24 Thu, 2023
+
+1. 完成 macro 到 dNode 的抽象，重新定义了 dNode 成员变量，只保留计算数据流所必须的内容，从而无论输入是 cell 还是 macro，计算出这些成员变量的值即可实现统一的抽象
+2. 无法从 macro 的引脚找到所连接的 net，特别追踪了`ms00f80 x_out_0_reg_0_ (.ck(ispd_clk), .d(n_7222), .o(x_out_0_0));`语句中各元件的连接结构。其中 `net x_out_0_0` 的连接结构如下
+   ![](./figures/x_out_0_0.png)
+   其中 `net x_out_0_0` 在 PlaceDB 中只连接了 3 个 pin，全部在图中，并没有连接到 `macro ms00f80` 的部分。目前推测 `x_out_0_reg_0_` 是 `macro ms00f80` 的一个实例？那哪些是 cell，哪些是 macro？
+
+TODO
+
+-   [ ] 确认语法含义
+-   [ ] 了解 cells.lef, floorplan.def, design.v, tech.def 的内容含义和作用。目前的理解是
+    -   cells.lef: 定义了各 macro
+    -   floorplan.def: 描述了基板上每行的属性
+    -   design.v: 描述 cell 和 net 之间的连接关系
+    -   tech.def: 描述了基板上各部分的属性
+-   [ ] 考虑如何接入 ChipFormer
+
+## September 06 Wed, 2023
+1. 发现计算 datamask 时，x, y方向设置错了，与pl文件的方向不一致
+2. 找到可视化代码 bug，变量赋值出现错误
+3. datamask 代码可能仍存在问题，可视化结果可以看到存在重叠的情况，预期中这不应该出现
+
+## September 11 Mon, 2023
+1. 完成可视化效果中数据流连线的绘制
+2. 将数据流指标添加到macro排序中，目前采用面积和数据流加权平均的方式，在加权平均前，对两个指标都进行了归一化$\frac{x-\bar{x}}{\sigma}$，$area$的权重是$\alpha$，$dataflow$的权重是$\beta$。
+3. 尝试了不同加权平均的比例参数，目前观察的结果是对$\alpha$在$0.05~0.6$之间非常不敏感，布局结果几乎没有区别，在$0~0.05$和$0.6~0.8$之间变化较大。目前推测是个别权重改动导致对布局结果影响较大的元件的放置顺序发生了变化，导致布局结果差异较大。
+4. 后续需要修改为考虑上一轮结果的迭代方式，这应该可以消除一些对参数的不稳定性
+5. 思源提到的 datamask 的布局结果的 dataflow loss 比 wiremask 大的问题，在$\alpha=0,\beta=1$的情况下，datamask布局结果的$dataflow\ loss$反而大于$\alpha=0.5,\beta=0.5$的情况。这说明希望$dataflow$得到最优布局的macro放置顺序需要考虑area，并且权重可能不小。另外，4 中的修改也可能可以解决这个问题。

@@ -8,11 +8,11 @@ import heapq
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from typing import Dict, Tuple, List
 
-from place_db import PlaceDB
+from typing import Dict, Tuple, List
 from scipy.spatial import distance
 
+from place_db import PlaceDB, Node
 from common import my_inf, grid_setting
 
 
@@ -49,6 +49,11 @@ def normalize(x: np.ndarray) -> np.ndarray:
     else:
         x = np.zeros_like(x)
     return x
+
+
+def l1_normalize(x: List) -> List:
+    s = sum(x)
+    return [xi / s for xi in x]
 
 
 def write_placement_and_overlap(place_record: PlaceRecord, net_hpwl, placedb: PlaceDB, method, dataset):
@@ -141,6 +146,46 @@ def rank_macros_area(placedb: PlaceDB) -> List[str]:  # 将macro按照固定顺�
     return node_name_ls
 
 
+def rank_macros_mixed_port(
+    placedb: PlaceDB, m2m_flow: M2MFlow, alpha=0.8, beta=0.2
+) -> List[str]:  # 将macro按照固定顺序（net面积总和）从大到小排列，输出排序后的macro序列。
+    for net_name in placedb.net_info:
+        sum = 0
+        for node_name in placedb.net_info[net_name]["nodes"].keys():
+            sum += placedb.node_info[node_name].area
+        placedb.net_info[net_name]["area"] = sum
+
+    rank_area = {node_name: 0 for node_name in placedb.macro_name}
+    if alpha > 0:
+        for net_name in placedb.net_info:
+            for node_name in placedb.net_info[net_name]["nodes"].keys():
+                if node_name in rank_area:
+                    rank_area[node_name] += placedb.net_info[net_name]["area"]  # 自己的面积被算了 #net 次？
+        nomalize_list = np.array(list(rank_area.values()))
+        aver = np.average(nomalize_list)
+        std = np.std(nomalize_list)
+        for node in rank_area:
+            rank_area[node] = (rank_area[node] - aver) / std
+
+    rank_dataflow = {node_name: 0 for node_name in placedb.macro_name}
+    if beta > 0:
+        for node_name1 in m2m_flow:
+            for node_name2 in m2m_flow[node_name1]:
+                if node_name1 in rank_dataflow:
+                    rank_dataflow[node_name1] += m2m_flow[node_name1][node_name2]
+        nomalize_list = np.array(list(rank_dataflow.values()))
+        aver = np.average(nomalize_list)
+        std = np.std(nomalize_list)
+        for node in rank_dataflow:
+            rank_dataflow[node] = (rank_dataflow[node] - aver) / std
+
+    alpha, beta = alpha / (alpha + beta), beta / (alpha + beta)
+
+    node_name_ls = sorted(placedb.macro_name, key=lambda x: alpha * rank_area[x] + beta * rank_dataflow[x], reverse=True)
+    node_name_ls = list(placedb.port_name) + node_name_ls
+    return node_name_ls
+
+
 def rank_macros_mixed(
     placedb: PlaceDB, m2m_flow: M2MFlow, alpha=0.8, beta=0.2
 ) -> List[str]:  # 将macro按照固定顺序（net面积总和）从大到小排列，输出排序后的macro序列。
@@ -152,37 +197,29 @@ def rank_macros_mixed(
 
     rank_area = {node_name: 0 for node_name in placedb.node_info}
     if alpha > 0:
-        aver_area = 0
         for net_name in placedb.net_info:
             for node_name in placedb.net_info[net_name]["nodes"].keys():
-                rank_area[node_name] += placedb.net_info[net_name]["area"]  # 自己的面积被算了 #net 次？
-                aver_area += placedb.net_info[net_name]["area"]
+                if node_name in rank_area:
+                    rank_area[node_name] += placedb.net_info[net_name]["area"]  # 自己的面积被算了 #net 次？
         nomalize_list = np.array(list(rank_area.values()))
         aver = np.average(nomalize_list)
         std = np.std(nomalize_list)
         for node in rank_area:
             rank_area[node] = (rank_area[node] - aver) / std
 
-        # nomalize_list = normalize(list(rank_area.values()))
-        # for node, v in zip(rank_area, nomalize_list):
-        #     rank_area[node] = v
-
     rank_dataflow = {node_name: 0 for node_name in placedb.node_info}
     if beta > 0:
         for node_name1 in m2m_flow:
             for node_name2 in m2m_flow[node_name1]:
-                rank_dataflow[node_name1] += m2m_flow[node_name1][node_name2]
+                if node_name1 in rank_dataflow:
+                    rank_dataflow[node_name1] += m2m_flow[node_name1][node_name2]
         nomalize_list = np.array(list(rank_dataflow.values()))
         aver = np.average(nomalize_list)
         std = np.std(nomalize_list)
         for node in rank_dataflow:
             rank_dataflow[node] = (rank_dataflow[node] - aver) / std
 
-        # nomalize_list = normalize(list(rank_dataflow.values()))
-        # for node, v in zip(rank_dataflow, nomalize_list):
-        #     rank_area[node] = v
-
-    alpha, beta = alpha / (alpha + beta), beta / (alpha + beta)
+    alpha, beta = alpha / (alpha + beta), beta / (alpha + beta)# TODO
 
     node_name_ls = sorted(placedb.node_info, key=lambda x: alpha * rank_area[x] + beta * rank_dataflow[x], reverse=True)
     return node_name_ls
@@ -258,24 +295,24 @@ def cal_datamask(
             pos_x2, pos_y2 = place_record[node_name2].center_x, place_record[node_name2].center_y
         else:
             pos_x2, pos_y2 = place_record_old[node_name2].center_x, place_record_old[node_name2].center_y
-            # for col in range(grid_num):  # 改为使用曼哈顿距离，减少对 row 的遍历，降低计算量
-            #     row = col
-            #     pos_x = row * grid_size + 0.5 * placedb.node_info[node_name].width
-            #     pos_y = col * grid_size + 0.5 * placedb.node_info[node_name].height
-            #     data_mask[row, :] += df_func(abs(place_record[node_name2].center_x - pos_x), df)
-            #     data_mask[:, col] += df_func(abs(place_record[node_name2].center_y - pos_y), df)
-
-        for row in range(grid_num):  # 欧氏距离需要对row和col进行遍历，计算量较大
+        for col in range(grid_num):  # 改为使用曼哈顿距离，减少对 row 的遍历，降低计算量
+            row = col
             pos_x = row * grid_size + 0.5 * placedb.node_info[node_name1].width
-            for col in range(grid_num):
-                pos_y = col * grid_size + 0.5 * placedb.node_info[node_name1].height
-                data_mask[row, col] += df_func(
-                    distance.euclidean(
-                        (pos_x, pos_y),
-                        (pos_x2, pos_y2),
-                    ),
-                    m2m_flow[node_name1][node_name2],
-                )
+            pos_y = col * grid_size + 0.5 * placedb.node_info[node_name1].height
+            data_mask[row, :] += df_func(abs(pos_x2 - pos_x), m2m_flow[node_name1][node_name2])
+            data_mask[:, col] += df_func(abs(pos_y2 - pos_y), m2m_flow[node_name1][node_name2])
+
+        # for row in range(grid_num):  # 欧氏距离需要对row和col进行遍历，计算量较大
+        #     pos_x = row * grid_size + 0.5 * placedb.node_info[node_name1].width
+        #     for col in range(grid_num):
+        #         pos_y = col * grid_size + 0.5 * placedb.node_info[node_name1].height
+        #         data_mask[row, col] += df_func(
+        #             distance.euclidean(
+        #                 (pos_x, pos_y),
+        #                 (pos_x2, pos_y2),
+        #             ),
+        #             m2m_flow[node_name1][node_name2],
+        #         )
     return data_mask
 
 
@@ -294,6 +331,13 @@ def cal_datamask(
 
 #         position_mask[bottom_left_x:top_right_x, bottom_left_y:top_right_y] = my_inf  #! TODO 哪些位置需要赋0
 #     return position_mask
+
+
+# def cal_positionmask_port(placedb: PlaceDB, grid_num: int):
+#     position_mask = np.zeros((grid_num, grid_num), dtype=bool)
+#     for node_name, node_info in placedb.node_info.items():
+#         if node_info.is_port:
+#             pass
 
 
 def cal_positionmask(node_name1: str, placedb: PlaceDB, place_record: PlaceRecord, grid_num):
@@ -351,19 +395,23 @@ def datamask_placer(node_id_ls, placedb: PlaceDB, grid_num, grid_size, place_rec
     N2_time = 0
     for cnt, node_name in enumerate(node_id_ls):
         # print(cnt, node_id)
-        #! 这部分为什么不直接用 place_record 里的结果？line 294-300
-        position_mask = cal_positionmask(node_name, placedb, new_place_record, grid_num)
-        if not np.any(position_mask == 1):
-            print("no_legal_place")
-            print("\n")
-            return {}, my_inf
+        if placedb.node_info[node_name].is_port:
+            chosen_loc_x = placedb.node_info[node_name].bottom_left_x // grid_size
+            chosen_loc_y = placedb.node_info[node_name].bottom_left_y // grid_size
+        else:
+            #! 这部分为什么不直接用 place_record 里的结果？line 294-300
+            position_mask = cal_positionmask(node_name, placedb, new_place_record, grid_num)
+            if not np.any(position_mask == 1):
+                print("no_legal_place")
+                print("\n")
+                return {}, my_inf
 
-        # TODO !
-        time0 = time.time()
-        data_mask = cal_datamask(node_name, placedb, grid_num, grid_size, new_place_record, place_record, m2m_flow)
-        data_mask = normalize(data_mask)
-        chosen_loc_x, chosen_loc_y = chose_position(node_name, data_mask, position_mask, place_record)
-        N2_time += time.time() - time0
+            # TODO !
+            time0 = time.time()
+            data_mask = cal_datamask(node_name, placedb, grid_num, grid_size, new_place_record, place_record, m2m_flow)
+            data_mask = normalize(data_mask)
+            chosen_loc_x, chosen_loc_y = chose_position(node_name, data_mask, position_mask, place_record)
+            N2_time += time.time() - time0
 
         width, height = placedb.node_info[node_name].width, placedb.node_info[node_name].height
         new_place_record[node_name] = Record(width, height, chosen_loc_x, chosen_loc_y, grid_size)
@@ -434,17 +482,20 @@ def wiremask_placer(node_name_ls: List[str], placedb: PlaceDB, grid_num, grid_si
     time_start = time.time()
     N2_time = 0
     for node_name in node_name_ls:
+        net_ls = {}
+        for net_id in placedb.net_info.keys():
+            if node_name in placedb.net_info[net_id]["nodes"].keys():
+                net_ls[net_id] = placedb.net_info[net_id]
+        # if placedb.node_info[node_name].is_port:
+        #     chosen_loc_x = placedb.node_info[node_name].bottom_left_x // grid_size
+        #     chosen_loc_y = placedb.node_info[node_name].bottom_left_y // grid_size
+        # else:
         #! 这部分为什么不直接用 place_record 里的结果？line 294-300
         position_mask = cal_positionmask(node_name, placedb, new_place_record, grid_num)
         if not np.any(position_mask == 1):
             print("no_legal_place")
             print("\n")
             return {}, my_inf
-
-        net_ls = {}
-        for net_id in placedb.net_info.keys():
-            if node_name in placedb.net_info[net_id]["nodes"].keys():
-                net_ls[net_id] = placedb.net_info[net_id]
 
         time0 = time.time()
         wire_mask = cal_wiremask(node_name, placedb, grid_num, grid_size, net_ls, hpwl_info_for_each_net)
@@ -468,6 +519,16 @@ def wiremask_placer(node_name_ls: List[str], placedb: PlaceDB, grid_num, grid_si
     return new_place_record, hpwl
 
 
+def cal_regularity_mask(node_name1: str, placedb: PlaceDB, grid_num: int, grid_size: int):
+    regu_mask = np.zeros((grid_num, grid_num))
+    for row in range(grid_num):  # 欧氏距离需要对row和col进行遍历，计算量较大
+        pos_x = row * grid_size + 0.5 * placedb.node_info[node_name1].width
+        for col in range(grid_num):
+            pos_y = col * grid_size + 0.5 * placedb.node_info[node_name1].height
+            regu_mask[row, col] = min(pos_x, placedb.max_width - pos_x) + min(pos_y, placedb.max_height - pos_y)
+    return regu_mask
+
+
 def mixed_placer(
     node_name_ls: List[str],
     placedb: PlaceDB,
@@ -475,17 +536,28 @@ def mixed_placer(
     grid_size,
     place_record: PlaceRecord,
     m2m_flow,
-    alpha=0.5,
-    beta=0.5,
+    alpha=0.6,
+    beta=0.3,
+    gamma=0.1,
 ):
-    alpha, beta = alpha / (alpha + beta), beta / (alpha + beta)
+    alpha, beta, gamma = l1_normalize([alpha, beta, gamma])
     shuffle = 0
     new_place_record: PlaceRecord = {}
     hpwl_info_for_each_net = {}
+    total_regu_mask = {}
 
     time_start = time.time()
     N2_time = 0
     for node_name in node_name_ls:
+        if alpha > 0:
+            net_ls = {}
+            for net_id in placedb.net_info.keys():
+                if node_name in placedb.net_info[net_id]["nodes"].keys():
+                    net_ls[net_id] = placedb.net_info[net_id]
+        # if placedb.node_info[node_name].is_port:
+        #     chosen_loc_x = placedb.node_info[node_name].bottom_left_x // grid_size
+        #     chosen_loc_y = placedb.node_info[node_name].bottom_left_y // grid_size
+        # else:
         #! 这部分为什么不直接用 place_record 里的结果？line 294-300
         position_mask = cal_positionmask(node_name, placedb, new_place_record, grid_num)
         if not np.any(position_mask == 1):
@@ -493,14 +565,7 @@ def mixed_placer(
             print("\n")
             return [], my_inf
 
-        if alpha > 0:
-            net_ls = {}
-            for net_id in placedb.net_info.keys():
-                if node_name in placedb.net_info[net_id]["nodes"].keys():
-                    net_ls[net_id] = placedb.net_info[net_id]
-
         time0 = time.time()
-
         if alpha > 0:
             wiremask = cal_wiremask(node_name, placedb, grid_num, grid_size, net_ls, hpwl_info_for_each_net)
             wiremask = normalize(wiremask)
@@ -511,9 +576,16 @@ def mixed_placer(
             datamask = normalize(datamask)
         else:
             datamask = np.zeros((grid_num, grid_num))
-        mask = alpha * wiremask + beta * datamask
+        if gamma > 0:
+            if node_name not in total_regu_mask:
+                total_regu_mask[node_name] = normalize(cal_regularity_mask(node_name, placedb, grid_num, grid_size))
+            regu_mask = total_regu_mask[node_name]
+        else:
+            regu_mask = np.zeros((grid_num, grid_num))
+        mask = alpha * wiremask + beta * datamask + gamma * regu_mask
         chosen_loc_x, chosen_loc_y = chose_position(node_name, mask, position_mask, place_record)
         N2_time += time.time() - time0
+
         if alpha > 0:
             hpwl_info_for_each_net = update_info(
                 node_name, placedb, grid_size, chosen_loc_x, chosen_loc_y, net_ls, hpwl_info_for_each_net
@@ -548,7 +620,7 @@ def write_final_placement(best_placed_macro: PlaceRecord, dir):
     csv_file2.close()
 
 
-def draw(place_record: PlaceRecord, file_path, placedb: PlaceDB, m2m_flow: M2MFlow, correct=None):
+def draw_macro_placement(place_record: PlaceRecord, file_path, placedb: PlaceDB, m2m_flow: M2MFlow, correct=None):
     fig = plt.figure()
     ax = fig.add_axes([0, 0, 1, 1], frameon=True, aspect=1.0)
     ax.xaxis.set_visible(False)
@@ -575,16 +647,16 @@ def draw(place_record: PlaceRecord, file_path, placedb: PlaceDB, m2m_flow: M2MFl
         cx = (x + width / 2) / placedb.max_width
         cy = (y + height / 2) / placedb.max_height
 
-        # ax.annotate(
-        #     placedb.node_info[node_name].id,
-        #     (x / placedb.max_width, y / placedb.max_height),
-        #     (cx, cy),
-        #     color="k",
-        #     weight="bold",
-        #     fontsize=6,
-        #     ha="center",
-        #     va="center",
-        # )
+        ax.annotate(
+            placedb.node_info[node_name].id,
+            (x / placedb.max_width, y / placedb.max_height),
+            (cx, cy),
+            color="k",
+            weight="bold",
+            fontsize=6,
+            ha="center",
+            va="center",
+        )
     for node_name1 in m2m_flow:
         for node_name2 in m2m_flow[node_name1]:
             ax.plot(
@@ -627,4 +699,67 @@ def read_placement(placedb: PlaceDB, grid_size, file_path) -> PlaceRecord:  # �
 
 def draw_macros(placedb: PlaceDB, pl_file, grid_size, m2m_flow: M2MFlow, pic_path):
     place_record = read_placement(placedb, grid_size, pl_file)
-    draw(place_record, pic_path, placedb, m2m_flow)
+    draw_macro_placement(place_record, pic_path, placedb, m2m_flow)
+
+
+def draw_detailed_placement(node_file: str, pl_file: str, pic_file: str, max_width: int, max_height: int, grid_size: int):
+    node_dict: Dict[str, Node] = {}
+    with open(node_file, "r", encoding="utf8") as f:
+        cnt = 0
+        for l in f:
+            if l.startswith("\t") or l.startswith(" "):
+                l = l.strip().split()
+                node_name, width, height = l[:3]
+                node = Node(cnt, node_name, 0, 0, int(width), int(height), grid_size)
+                if l[-1] == "terminal":
+                    node.is_fixed = True
+                    cnt += 1
+                node_dict[node_name] = node
+    with open(pl_file, "r", encoding="utf8") as f:
+        for l in f:
+            if l.startswith("o"):
+                l = l.strip().split()
+                node_name, bottom_left_x, bottom_left_y = l[:3]
+                node_dict[node_name].bottom_left_x = int(bottom_left_x)
+                node_dict[node_name].bottom_left_y = int(bottom_left_y)
+
+    fig = plt.figure()
+    ax = fig.add_axes([0, 0, 1, 1], frameon=True, aspect=1.0)
+    ax.xaxis.set_visible(False)
+    ax.yaxis.set_visible(False)
+    # for node_name, node in node_dict.items():
+    node_x_list, node_y_list = [], []
+    for node in node_dict.values():
+        # print(node.name)
+        if node.is_fixed:
+            ax.add_patch(
+                patches.Rectangle(
+                    (node.bottom_left_x / max_width, node.bottom_left_y / max_height),  # (x,y)
+                    float(node.width / max_width),  # width
+                    float(node.height / max_height),
+                    linewidth=0.1,
+                    edgecolor="k",
+                    alpha=0.9,
+                    facecolor="tab:green",
+                )
+            )
+            cx = (node.bottom_left_x + node.width / 2) / max_width
+            cy = (node.bottom_left_y + node.height / 2) / max_height
+            ax.annotate(
+                node.id,
+                (node.bottom_left_x / max_width, node.bottom_left_y / max_height),
+                (cx, cy),
+                color="k",
+                weight="bold",
+                fontsize=6,
+                ha="center",
+                va="center",
+            )
+        else:
+            node_x_list.append(node.bottom_left_x / max_width)
+            node_y_list.append(node.bottom_left_y / max_height)
+    ax.scatter(node_x_list, node_y_list, 0.15, "dodgerblue", edgecolors="none")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    fig.savefig(pic_file, dpi=600, bbox_inches="tight")
+    plt.close(fig)

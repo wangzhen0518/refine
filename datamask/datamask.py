@@ -10,7 +10,7 @@ from utils import (
     datamask_placer,
     write_final_placement,
     rank_macros_area,
-    rank_macros_mixed,
+    rank_macros_mixed_port,
     get_m2m_flow,
     cal_hpwl,
     draw_macros,
@@ -44,7 +44,7 @@ def hot_start(
     hpwl_writer = csv.writer(hpwl_save_file)
     best_hpwl = my_inf
     m2m_flow = get_m2m_flow(m2m_flow_file)
-    node_id_ls = rank_macros_mixed(placedb, m2m_flow, 0.8, 0.2)
+    node_id_ls = rank_macros_mixed_port(placedb, m2m_flow, 0.8, 0.2)
 
     place_record = db2record(placedb, grid_size)
     print("origin hpwl: ", cal_hpwl(place_record, placedb))

@@ -10,7 +10,7 @@ from utils import (
     wiremask_placer,
     write_final_placement,
     rank_macros_area,
-    rank_macros_mixed,
+    rank_macros_mixed_port,
     get_m2m_flow,
     cal_hpwl,
     draw_macros,
@@ -25,7 +25,11 @@ def db2record(placedb: PlaceDB, grid_size: int) -> Dict[str, Record]:
         chosen_loc_x = int(placedb.node_info[node_name].bottom_left_x / grid_size)
         chosen_loc_y = int(placedb.node_info[node_name].bottom_left_y / grid_size)
         place_record[node_name] = Record(
-            placedb.node_info[node_name].width, placedb.node_info[node_name].height, chosen_loc_x, chosen_loc_y, grid_size
+            placedb.node_info[node_name].width,
+            placedb.node_info[node_name].height,
+            chosen_loc_x,
+            chosen_loc_y,
+            grid_size,
         )
     return place_record
 
@@ -44,23 +48,27 @@ def hot_start(
     hpwl_writer = csv.writer(hpwl_save_file)
     best_hpwl = my_inf
     m2m_flow = get_m2m_flow(m2m_flow_file)
-    node_id_ls = rank_macros_mixed(placedb, m2m_flow, 0.8, 0.2)
+    node_id_ls = rank_macros_area(placedb)
 
     place_record = db2record(placedb, grid_size)
-    print("origin hpwl: ", cal_hpwl(place_record, placedb))
+    origin_hpwl = cal_hpwl(place_record, placedb)
+    print("origin hpwl: ", origin_hpwl)
+    hpwl_writer.writerow([origin_hpwl, time.time()])
     best_placed_record, best_hpwl = dict(), my_inf
-    for i in range(stop_round):
-        print(i)
-        place_record, hpwl = wiremask_placer(node_id_ls, placedb, grid_num, grid_size, place_record, m2m_flow)
-        hpwl_writer.writerow([hpwl, time.time()])
-        hpwl_save_file.flush()
-        if hpwl < best_hpwl:
-            best_hpwl = hpwl
-            best_placed_record = place_record
-            write_final_placement(best_placed_record, placement_save_file)
-    hpwl_writer.writerow([best_hpwl, time.time()])
+    # for i in range(stop_round):
+    #     print(i)
+    place_record, hpwl = wiremask_placer(node_id_ls, placedb, grid_num, grid_size, place_record, m2m_flow)
+    hpwl_writer.writerow([hpwl, time.time()])
+    # hpwl_save_file.flush()
+    #     if hpwl < best_hpwl:
+    #         best_hpwl = hpwl
+    #         best_placed_record = place_record
+    #         write_final_placement(best_placed_record, placement_save_file)
+    # hpwl_writer.writerow([best_hpwl, time.time(), "\n"])
+    hpwl_writer.writerow([])
     hpwl_save_file.flush()
-    return best_placed_record
+    write_final_placement(place_record, placement_save_file)
+    return place_record
 
 
 def main():
@@ -91,8 +99,8 @@ def main():
     if not os.path.exists(pic_save_dir):
         os.makedirs(pic_save_dir)
 
-    hpwl_save_dir += "{}_seed_{}_wiremask_iter.csv".format(dataset, seed1)
-    placement_save_dir += "{}_seed_{}_wiremask_iter.csv".format(dataset, seed1)
+    hpwl_save_dir += "{}_seed_{}_wiremask.csv".format(dataset, seed1)
+    placement_save_dir += "{}_seed_{}_wiremask.csv".format(dataset, seed1)
     m2m_flow_file = "benchmarks/{}/macro2macro.csv".format(dataset)
 
     best_placed_macro = hot_start(

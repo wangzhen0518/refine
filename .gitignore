@@ -21,7 +21,7 @@ res/
 install/
 bin/
 include/
-results/
+results*/
 # benchmarks/
 # thirdparty/
 tmp/

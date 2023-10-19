@@ -19,6 +19,8 @@ class Node:
         self.scaled_width: int = math.ceil(_width / grid_size)
         self.scaled_height: int = math.ceil(_height / grid_size)
         self.area_sum: int = 0
+        self.is_fixed = False
+        self.is_port = False
 
 
 class Port:
@@ -277,6 +279,17 @@ class PlaceDB:
             self.max_height, self.max_width = read_scl_file(scl_file, benchmark)
 
         self.node_to_net_dict = get_node_to_net_dict(self.node_info, self.net_info)
+        self.aver_area = sum([ni.area for ni in self.node_info.values()]) / self.node_cnt
+        self.macro_name = set()
+        self.port_name = set()
+        self.port_cnt = 0
+        for ni in self.node_info.values():
+            if ni.area < self.aver_area:
+                ni.is_port = True
+                self.port_cnt += 1
+                self.port_name.add(ni.name)
+            else:
+                self.macro_name.add(ni.name)
 
     def debug_str(self):
         print("node_cnt = {}".format(len(self.node_info)))

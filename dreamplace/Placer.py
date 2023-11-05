@@ -5,25 +5,27 @@
 # @brief  Main file to run the entire placement flow.
 #
 
-import matplotlib
-
-matplotlib.use("Agg")
+import logging
 import os
 import sys
 import time
+from typing import Tuple
+
+import matplotlib
 import numpy as np
-import logging
 
 # for consistency between python2 and python3
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if root_dir not in sys.path:
     sys.path.append(root_dir)
-import dreamplace.configure as configure
-import Params
-import PlaceDB
-import Timer
-import NonLinearPlace
-import pdb
+import NonLinearPlace  # noqa: E402
+import Params  # noqa: E402
+import PlaceDB  # noqa: E402
+import Timer  # noqa: E402
+
+import dreamplace.configure as configure  # noqa: E402
+
+matplotlib.use("Agg")
 
 
 def is_float(s):
@@ -38,19 +40,19 @@ def read_maskplace(placedb: PlaceDB.PlaceDB, csv_file):
     place_record = {}
     with open(csv_file, encoding="utf8") as f:
         pos = 0
-        l = f.readline()
-        while l != "":
-            if is_float(l):
+        line = f.readline()
+        while line != "":
+            if is_float(line):
                 pos = f.tell()
-            l = f.readline()
+            line = f.readline()
         f.seek(pos)
 
-        l = f.readline()
-        while l != "" and l != "\n":
-            l = l.strip().split(",")
-            macro, x, y = l[0], int(l[1]), int(l[2])
+        line = f.readline()
+        while line != "" and line != "\n":
+            line = line.strip().split(",")
+            macro, x, y = line[0], int(line[1]), int(line[2])
             place_record[macro] = [x, y]
-            l = f.readline()
+            line = f.readline()
 
     for macro, (x, y) in place_record.items():
         idx = placedb.node_name2id_map[macro]
@@ -60,29 +62,19 @@ def read_maskplace(placedb: PlaceDB.PlaceDB, csv_file):
     return placedb
 
 
-def write_pl(params):
-    """
-    @brief Top API to run the entire placement flow.
-    @param params parameters
-    """
-
-    assert (not params.gpu) or configure.compile_configurations["CUDA_FOUND"] == "TRUE", "CANNOT enable GPU without CUDA compiled"
-
-    np.random.seed(params.random_seed)
-    # read database
-    tt = time.time()
-    placedb = PlaceDB.PlaceDB()
-    placedb(params)
-
-    csv_file = os.path.join(params.result_dir, params.design_name(), "mixedmask.csv")
-    read_maskplace(placedb, csv_file)
-
-    # write placement solution
-    path = "%s/%s" % (params.result_dir, params.design_name())
-    if not os.path.exists(path):
-        os.system("mkdir -p %s" % (path))
-    gp_out_file = os.path.join(path, "%s.gp.%s" % (params.design_name(), params.solution_file_suffix()))
-    placedb.write(params, gp_out_file)
+def read_pl_file(
+    placedb: PlaceDB.PlaceDB, pl_file: str, shift_factor: Tuple[float, float]
+):
+    with open(pl_file, encoding="utf8") as f:
+        for line in f:
+            if line.startswith("o"):
+                line = line.strip().split()
+                node_name = line[0]
+                bottom_left_x, bottom_left_y = int(line[1]), int(line[2])
+                idx = placedb.node_name2id_map[node_name]
+                placedb.node_x[idx] = bottom_left_x - shift_factor[0]
+                placedb.node_y[idx] = bottom_left_y - shift_factor[1]
+    return placedb
 
 
 def place(params):
@@ -91,7 +83,9 @@ def place(params):
     @param params parameters
     """
 
-    assert (not params.gpu) or configure.compile_configurations["CUDA_FOUND"] == "TRUE", "CANNOT enable GPU without CUDA compiled"
+    assert (not params.gpu) or configure.compile_configurations[
+        "CUDA_FOUND"
+    ] == "TRUE", "CANNOT enable GPU without CUDA compiled"
 
     np.random.seed(params.random_seed)
     # read database
@@ -101,12 +95,12 @@ def place(params):
 
     is_origin = False
     if not is_origin:
-        # csv_file = os.path.join(params.result_dir, params.design_name(), "mixedmask.csv")
-        csv_file = f"./datamask/result/EA_swap_only/placement/{params.design_name()}_seed_2027_mixedmask_iter_random.csv"
         # csv_file = f"./datamask/result/EA_swap_only/placement/{params.design_name()}_seed_2027_wiremask.csv"
-        read_maskplace(placedb, csv_file)
-        params.shift_factor = [0.0, 0.0]
-        params.scale_factor = 1.0
+        # pl_file = f"./results_macro_front_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
+        pl_file = (
+            f"./results_macro_refine-EA_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
+        )
+        read_pl_file(placedb, pl_file, params.shift_factor)
 
     logging.info("reading database takes %.2f seconds" % (time.time() - tt))
 
@@ -130,7 +124,9 @@ def place(params):
     # solve placement
     tt = time.time()
     placer = NonLinearPlace.NonLinearPlace(params, placedb, timer)
-    logging.info("non-linear placement initialization takes %.2f seconds" % (time.time() - tt))
+    logging.info(
+        "non-linear placement initialization takes %.2f seconds" % (time.time() - tt)
+    )
     metrics = placer(params, placedb)
     logging.info("non-linear placement takes %.2f seconds" % (time.time() - tt))
 
@@ -138,7 +134,9 @@ def place(params):
     path = "%s/%s" % (params.result_dir, params.design_name())
     if not os.path.exists(path):
         os.system("mkdir -p %s" % (path))
-    gp_out_file = os.path.join(path, "%s.gp.%s" % (params.design_name(), params.solution_file_suffix()))
+    gp_out_file = os.path.join(
+        path, "%s.gp.%s" % (params.design_name(), params.solution_file_suffix())
+    )
     placedb.write(params, gp_out_file)
 
     # call external detailed placement
@@ -146,9 +144,12 @@ def place(params):
     # 1. NTUplace3/NTUplace4h with Bookshelf format
     # 2. NTUplace_4dr with LEF/DEF format
     if params.detailed_place_engine and os.path.exists(params.detailed_place_engine):
-        logging.info("Use external detailed placement engine %s" % (params.detailed_place_engine))
+        logging.info(
+            "Use external detailed placement engine %s" % (params.detailed_place_engine)
+        )
         if params.solution_file_suffix() == "pl" and any(
-            dp_engine in params.detailed_place_engine for dp_engine in ["ntuplace3", "ntuplace4h"]
+            dp_engine in params.detailed_place_engine
+            for dp_engine in ["ntuplace3", "ntuplace4h"]
         ):
             dp_out_file = gp_out_file.replace(".gp.pl", "")
             # add target density constraint if provided
@@ -166,7 +167,9 @@ def place(params):
             logging.info("%s" % (cmd))
             tt = time.time()
             os.system(cmd)
-            logging.info("External detailed placement takes %.2f seconds" % (time.time() - tt))
+            logging.info(
+                "External detailed placement takes %.2f seconds" % (time.time() - tt)
+            )
 
             if params.plot_flag:
                 # read solution and evaluate
@@ -174,10 +177,15 @@ def place(params):
                 iteration = len(metrics)
                 pos = placer.init_pos
                 pos[0 : placedb.num_physical_nodes] = placedb.node_x
-                pos[placedb.num_nodes : placedb.num_nodes + placedb.num_physical_nodes] = placedb.node_y
-                hpwl, density_overflow, max_density = placer.validate(placedb, pos, iteration)
+                pos[
+                    placedb.num_nodes : placedb.num_nodes + placedb.num_physical_nodes
+                ] = placedb.node_y
+                hpwl, density_overflow, max_density = placer.validate(
+                    placedb, pos, iteration
+                )
                 logging.info(
-                    "iteration %4d, HPWL %.3E, overflow %.3E, max density %.3E" % (iteration, hpwl, density_overflow, max_density)
+                    "iteration %4d, HPWL %.3E, overflow %.3E, max density %.3E"
+                    % (iteration, hpwl, density_overflow, max_density)
                 )
                 placer.plot(params, placedb, iteration, pos)
         elif "ntuplace_4dr" in params.detailed_place_engine:
@@ -202,7 +210,9 @@ def place(params):
             cmd += "mv ntuplace_4dr_out.fence.plt %s.fence.plt ; " % (dp_out_file)
             cmd += "mv ntuplace_4dr_out.init.plt %s.init.plt ; " % (dp_out_file)
             cmd += "mv ntuplace_4dr_out %s.ntup.def ; " % (dp_out_file)
-            cmd += "mv ntuplace_4dr_out.ntup.overflow.plt %s.ntup.overflow.plt ; " % (dp_out_file)
+            cmd += "mv ntuplace_4dr_out.ntup.overflow.plt %s.ntup.overflow.plt ; " % (
+                dp_out_file
+            )
             cmd += "mv ntuplace_4dr_out.ntup.plt %s.ntup.plt ; " % (dp_out_file)
             if os.path.exists("%s/dat" % (os.path.dirname(dp_out_file))):
                 cmd += "rm -r %s/dat ; " % (os.path.dirname(dp_out_file))
@@ -210,11 +220,18 @@ def place(params):
             logging.info("%s" % (cmd))
             tt = time.time()
             os.system(cmd)
-            logging.info("External detailed placement takes %.2f seconds" % (time.time() - tt))
+            logging.info(
+                "External detailed placement takes %.2f seconds" % (time.time() - tt)
+            )
         else:
-            logging.warning("External detailed placement only supports NTUplace3/NTUplace4dr API")
+            logging.warning(
+                "External detailed placement only supports NTUplace3/NTUplace4dr API"
+            )
     elif params.detailed_place_engine:
-        logging.warning("External detailed placement engine %s or aux file NOT found" % (params.detailed_place_engine))
+        logging.warning(
+            "External detailed placement engine %s or aux file NOT found"
+            % (params.detailed_place_engine)
+        )
 
     return metrics
 
@@ -224,7 +241,11 @@ if __name__ == "__main__":
     @brief main function to invoke the entire placement flow.
     """
     logging.root.name = "DREAMPlace"
-    logging.basicConfig(level=logging.INFO, format="[%(levelname)-7s] %(name)s - %(message)s", stream=sys.stdout)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(levelname)-7s] %(name)s - %(message)s",
+        stream=sys.stdout,
+    )
     params = Params.Params()
     params.printWelcome()
     if len(sys.argv) == 1 or "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:

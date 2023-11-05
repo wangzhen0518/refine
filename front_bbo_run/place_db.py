@@ -8,7 +8,16 @@ from pydantic import BaseModel
 
 
 class Node:
-    def __init__(self, _id, _name, _bottom_left_x, _bottom_left_y, _width, _height, grid_size):
+    def __init__(
+        self,
+        _id: int = 0,
+        _name: str = "",
+        _bottom_left_x: int = 0,
+        _bottom_left_y: int = 0,
+        _width: int = 0,
+        _height: int = 0,
+        grid_size: int = 0,
+    ):
         self.id: int = _id
         self.name: str = _name
         self.bottom_left_x: int = _bottom_left_x
@@ -53,15 +62,22 @@ def read_net_file(fopen, node_info):
     net_info = {}
     net_name = None
     net_cnt = 0
+    pin_cnt = 0
     for line in fopen.readlines():
-        if not line.startswith("\t") and not line.startswith("  ") and not line.startswith("NetDegree"):
+        if (
+            not line.startswith("\t")
+            and not line.startswith("  ")
+            and not line.startswith("NetDegree")
+        ):
             continue
         line = line.strip().split()
         if line[0] == "NetDegree":
             net_name = line[-1]
         else:
             node_name = line[0]
+            node_direct = line[1]
             if node_name in node_info:  # 只留 macro
+                pin_cnt += 1
                 if not net_name in net_info:
                     net_info[net_name] = {}
                     net_info[net_name]["nodes"] = {}
@@ -69,13 +85,19 @@ def read_net_file(fopen, node_info):
                 if not node_name.startswith("p") and not node_name in net_info[net_name]["nodes"]:
                     x_offset = float(line[-2])
                     y_offset = float(line[-1])
-                    net_info[net_name]["nodes"][node_name] = {}
-                    net_info[net_name]["nodes"][node_name] = {"x_offset": x_offset, "y_offset": y_offset}
+                    net_info[net_name]["nodes"][node_name] = {
+                        "direct": node_direct,
+                        "x_offset": x_offset,
+                        "y_offset": y_offset,
+                    }
                 elif node_name.startswith("p") and node_name in net_info[net_name]["ports"]:
                     x_offset = float(line[-2])
                     y_offset = float(line[-1])
-                    net_info[net_name]["ports"][node_name] = {}
-                    net_info[net_name]["ports"][node_name] = {"x_offset": x_offset, "y_offset": y_offset}
+                    net_info[net_name]["ports"][node_name] = {
+                        "direct": node_direct,
+                        "x_offset": x_offset,
+                        "y_offset": y_offset,
+                    }
     for net_name in list(net_info.keys()):
         if len(net_info[net_name]["nodes"]) <= 1:
             net_info.pop(net_name)
@@ -83,7 +105,7 @@ def read_net_file(fopen, node_info):
         net_info[net_name]["id"] = net_cnt
         net_cnt += 1
     print("adjust net size = {}".format(len(net_info)))
-    return net_info
+    return net_info, pin_cnt
 
 
 def get_comp_hpwl_dict(node_info, net_info):
@@ -134,7 +156,9 @@ def read_pl_file(fopen, node_info: Dict[str, Node]):
         bottom_left_y = int(line[2])
         node_info[node_name].bottom_left_x = bottom_left_x
         node_info[node_name].bottom_left_y = bottom_left_y
-        max_height = max(max_height, node_info[node_name].width + node_info[node_name].bottom_left_x)
+        max_height = max(
+            max_height, node_info[node_name].width + node_info[node_name].bottom_left_x
+        )
         max_width = max(max_width, node_info[node_name].height + node_info[node_name].bottom_left_y)
         min_height = min(min_height, node_info[node_name].bottom_left_x)
         min_width = min(min_width, node_info[node_name].bottom_left_y)
@@ -193,7 +217,9 @@ def get_node_id_to_name_topology(node_info: Dict[str, Node], node_to_net_dict, n
     node_area_max = node_info[node_area_max_node].width * node_info[node_area_max_node].height
     print("node_area_max = {}".format(node_area_max))
     for node_name in node_info:
-        node_area_fea[node_name] = node_info[node_name].width * node_info[node_name].height / node_area_max
+        node_area_fea[node_name] = (
+            node_info[node_name].width * node_info[node_name].height / node_area_max
+        )
 
     if "V" in node_info:
         add_node = "V"
@@ -229,7 +255,10 @@ def get_node_id_to_name_topology(node_info: Dict[str, Node], node_to_net_dict, n
                 + int(hash(v) % 10000) * 1e-6,
             )
         else:
-            add_node = max(node_net_num, key=lambda v: node_net_num[v] * 1000 + node_info[v].width * node_info[v].height * 1)
+            add_node = max(
+                node_net_num,
+                key=lambda v: node_net_num[v] * 1000 + node_info[v].width * node_info[v].height * 1,
+            )
         visited_node.add(add_node)
         node_id_to_name.append((add_node, node_net_num[add_node]))
         node_net_num.pop(add_node)
@@ -256,26 +285,30 @@ def get_total_area(node_info: Dict[str, Node]):
 
 
 class PlaceDB:
-    def __init__(self, benchmark="adaptec1", grid_size=1):
+    def __init__(self, benchmark="adaptec1", grid_size=1, benchmark_dir="benchmarks"):
         self.benchmark = benchmark
-        assert os.path.exists(os.path.join("benchmarks", benchmark))
-        node_file = open(os.path.join("benchmarks", benchmark, benchmark + ".nodes"), "r")
-        self.node_info, self.node_info_raw_id_name, self.port_info = read_node_file(node_file, grid_size)
-        pl_file = open(os.path.join("benchmarks", benchmark, benchmark + ".pl"), "r")
+        assert os.path.exists(os.path.join(benchmark_dir, benchmark))
+        node_file = open(os.path.join(benchmark_dir, benchmark, benchmark + ".nodes"), "r")
+        self.node_info, self.node_info_raw_id_name, self.port_info = read_node_file(
+            node_file, grid_size
+        )
+        pl_file = open(os.path.join(benchmark_dir, benchmark, benchmark + ".pl"), "r")
         self.node_cnt = len(self.node_info)
         node_file.close()
-        net_file = open(os.path.join("benchmarks", benchmark, benchmark + ".nets"), "r")
-        self.net_info = read_net_file(net_file, self.node_info)
+        net_file = open(os.path.join(benchmark_dir, benchmark, benchmark + ".nets"), "r")
+        self.net_info, self.pin_cnt = read_net_file(net_file, self.node_info)
         self.net_cnt = len(self.net_info)
         net_file.close()
-        pl_file = open(os.path.join("benchmarks", benchmark, benchmark + ".pl"), "r")
-        self.max_height, self.max_width, self.min_height, self.min_width = read_pl_file(pl_file, self.node_info)
+        pl_file = open(os.path.join(benchmark_dir, benchmark, benchmark + ".pl"), "r")
+        self.max_height, self.max_width, self.min_height, self.min_width = read_pl_file(
+            pl_file, self.node_info
+        )
         pl_file.close()
         if not "ibm" in benchmark:
             self.port_to_net_dict = {}
         else:
             self.port_to_net_dict = get_port_to_net_dict(self.port_info, self.net_info)
-            scl_file = open(os.path.join("benchmarks", benchmark, benchmark + ".scl"), "r")
+            scl_file = open(os.path.join(benchmark_dir, benchmark, benchmark + ".scl"), "r")
             self.max_height, self.max_width = read_scl_file(scl_file, benchmark)
 
         self.node_to_net_dict = get_node_to_net_dict(self.node_info, self.net_info)
@@ -291,6 +324,9 @@ class PlaceDB:
             else:
                 self.macro_name.add(ni.name)
 
+    def node_list(self):
+        return self.node_info.values()
+
     def debug_str(self):
         print("node_cnt = {}".format(len(self.node_info)))
         print("net_cnt = {}".format(len(self.net_info)))
@@ -298,7 +334,77 @@ class PlaceDB:
         print("max_width = {}".format(self.max_width))
         print("pin_cnt = {}".format(get_pin_cnt(self.net_info)))
         print("port_cnt = {}".format(len(self.port_info)))
-        print("area_ratio = {}".format(get_total_area(self.node_info) / (self.max_height * self.max_height)))
+        print(
+            "area_ratio = {}".format(
+                get_total_area(self.node_info) / (self.max_height * self.max_height)
+            )
+        )
+
+    def write_nodes_pure(self, file: str):
+        with open(file, "a", encoding="utf8") as f:
+            for node in self.node_list():
+                f.write(f"\t{node.name}\t{node.width}\t{node.height}")
+                if node.is_port:
+                    f.write("\tterminal")
+                f.write("\n")
+
+    def write_nodes(self, file: str):
+        with open(file, "w", encoding="utf8") as f:
+            f.write(
+                """\
+UCLA nodes 1.0
+# Created	:	Jan  6 2005
+# User   	:	Gi-Joon Nam & Mehmet Yildiz at IBM Austin Research({gnam, mcan}@us.ibm.com)\n
+"""
+            )
+            f.write(
+                f"""\
+NumNodes : 		{self.node_cnt}
+NumTerminals : 		{self.port_cnt}
+"""
+            )
+        self.write_nodes_pure(file)
+
+    def write_pl_pure(self, file: str):
+        with open(file, "a", encoding="utf8") as f:
+            for node in self.node_list():
+                f.write(f"{node.name}\t{node.bottom_left_x}\t{node.bottom_left_y}\t: N")
+                if node.is_port:
+                    f.write(f" /FIXED")
+                f.write("\n")
+
+    def write_pl(self, file: str):
+        with open(file, "w", encoding="utf8") as f:
+            f.write("UCLA pl 1.0\n\n")
+        self.write_pl_pure(file)
+
+    def write_nets(self, file: str):
+        with open(file, "w", encoding="utf8") as f:
+            f.write(
+                """\
+UCLA nets 1.0
+# Created	:	Dec 27 2004
+# User   	:	Gi-Joon Nam & Mehmet Yildiz at IBM Austin Research({gnam, mcan}@us.ibm.com)
+"""
+            )
+            f.write("\n")
+            f.write(
+                f"""\
+NumNets : {self.net_cnt}
+NumPins : {self.pin_cnt}
+"""
+            )
+            f.write("\n")
+            for net in self.net_info:
+                f.write(f"NetDegree : {len(self.net_info[net]['nodes'])} {net}\n")
+                for node in self.net_info[net]["nodes"]:
+                    f.write(
+                        f"\t{node} {self.net_info[net]['nodes'][node]['direct']} : {self.net_info[net]['nodes'][node]['x_offset']:.6f} {self.net_info[net]['nodes'][node]['y_offset']:.6f}\n"
+                    )
+                for port in self.net_info[net]["ports"]:
+                    f.write(
+                        f"\t{port} {self.net_info[net]['nodes'][port]['direct']} : {self.net_info[net]['ports'][port]['x_offset']:.6f} {self.net_info[net]['ports'][port]['y_offset']:.6f}\n"
+                    )
 
 
 if __name__ == "__main__":

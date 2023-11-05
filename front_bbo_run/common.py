@@ -10,4 +10,15 @@ grid_setting = {
     "ariane": {"grid_num": 357, "grid_size": 1},
 }
 
+shift_factor = {
+    "adaptec1": [459, 459],
+    "adaptec2": [609, 616],
+    "adaptec3": [36, 58],
+    "adaptec4": [36, 58],
+    "bigblue1": [459, 459],
+    "bigblue2": [36, 76],
+    "bigblue3": [36, 76],
+    "bigblue4": [36, 58],
+}
+
 my_inf = 1e12

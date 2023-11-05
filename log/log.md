@@ -81,3 +81,9 @@ TODO
 
 ## October 13 Fri, 2023
 1. 统一采用随机布局，由于随机布局中的 port 的位置并没有明确的意义，所以恢复为不区分macro和port的方案
+
+## October 31 Tue, 2023
+1. EA调优函数现在是hpwl, dataflow, regularity的加权平均，但是这三者的量级差距很大，比如
+   `'value': 53286642039.95, 'hpwl': 1474387.0, 'dataflow': 96301.5, 'regularity': 266429379780.0`，可能需要进行类似归一化的操作，具体应该怎么做？
+2. EA扰动几乎都无用，只有极少数在迭代刚开始前 1-3 次扰动有效，大多数第一次扰动就无效。
+3. detailed placement时，注意删除需要删除的port

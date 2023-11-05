@@ -1,7 +1,6 @@
 #include <spdlog/spdlog.h>
 #include <cassert>
 #include <cmath>
-#include <csv2/writer.hpp>
 #include <iomanip>
 #include <iostream>
 #include <unordered_set>

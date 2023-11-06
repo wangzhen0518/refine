@@ -60,8 +60,9 @@ def read_pl_file(placedb: PlaceDB, pl_file: str):
                 line = line.strip().split()
                 node_name = line[0]
                 bottom_left_x, bottom_left_y = int(line[1]), int(line[2])
-                placedb.node_info[node_name].bottom_left_x = bottom_left_x
-                placedb.node_info[node_name].bottom_left_y = bottom_left_y
+                if node_name in placedb.node_info:
+                    placedb.node_info[node_name].bottom_left_x = bottom_left_x
+                    placedb.node_info[node_name].bottom_left_y = bottom_left_y
     return placedb
 
 
@@ -172,7 +173,7 @@ def draw_detailed_refine_dreamplace_mixed(benchmark):
     pic_file = os.path.join(
         "results_detailed_refine-EA_dreamplace-mixed",
         benchmark,
-        f"{benchmark}_id_noportid.png",
+        f"{benchmark}.png",
     )
     # pl_file = os.path.join("results", benchmark, f"{benchmark}.gp.pl")
     # pic_file = os.path.join("results", benchmark, f"{benchmark}_id_noportid.png")
@@ -187,6 +188,25 @@ def draw_detailed_refine_dreamplace_mixed(benchmark):
     )
 
 
+def draw_macro_front_dreamplace_mixed(benchmark):
+    print(f"draw_macro_front_dreamplace_mixed {benchmark}")
+    grid_size = grid_setting[benchmark]["grid_size"]
+    placedb = PlaceDB(benchmark, grid_size)
+    m2m_file = "benchmarks/{}/macro2macro.csv".format(benchmark)
+    m2m_flow = get_m2m_flow(m2m_file)
+    pl_file = os.path.join(
+        "results_detailed_front_dreamplace-mixed", benchmark, f"{benchmark}.gp.pl"
+    )
+    read_pl_file(placedb, pl_file)
+    front_bbo_record = db2record(placedb, grid_size)
+    pic_file = os.path.join(
+        "results_detailed_front_dreamplace-mixed",
+        benchmark,
+        f"{benchmark}_macro.png",
+    )
+    draw_macro_placement(front_bbo_record, pic_file, placedb, m2m_flow)
+
+
 def draw_macro_refine_dreamplace_mixed(benchmark):
     print(f"draw_macro_refine_dreamplace_mixed {benchmark}")
     grid_size = grid_setting[benchmark]["grid_size"]
@@ -199,9 +219,9 @@ def draw_macro_refine_dreamplace_mixed(benchmark):
     read_pl_file(placedb, pl_file)
     front_bbo_record = db2record(placedb, grid_size)
     pic_file = os.path.join(
-        "results_macro_refine-EA_dreamplace-mixed", benchmark, f"{benchmark}_noflow.png"
+        "results_macro_refine-EA_dreamplace-mixed", benchmark, f"{benchmark}.png"
     )
-    draw_macro_placement(front_bbo_record, pic_file, placedb, None)
+    draw_macro_placement(front_bbo_record, pic_file, placedb, m2m_flow)
 
 
 def draw_macro_front_bbo(benchmark):
@@ -213,10 +233,8 @@ def draw_macro_front_bbo(benchmark):
     pl_file = os.path.join("results_macro_front_bbo", benchmark, f"{benchmark}.gp.pl")
     read_pl_file(placedb, pl_file)
     front_bbo_record = db2record(placedb, grid_size)
-    pic_file = os.path.join(
-        "results_macro_front_bbo", benchmark, f"{benchmark}_noflow.png"
-    )
-    draw_macro_placement(front_bbo_record, pic_file, placedb, None)
+    pic_file = os.path.join("results_macro_front_bbo", benchmark, f"{benchmark}.png")
+    draw_macro_placement(front_bbo_record, pic_file, placedb, m2m_flow)
 
 
 def draw_macro_refine_bbo(benchmark):
@@ -231,9 +249,9 @@ def draw_macro_refine_bbo(benchmark):
     read_pl_file(placedb, pl_file)
     front_bbo_record = db2record(placedb, grid_size)
     pic_file = os.path.join(
-        "results_macro_refine-EA_bbo", benchmark, f"{benchmark}_noflow.png"
+        "results_macro_refine-EA_bbo", benchmark, f"{benchmark}.png"
     )
-    draw_macro_placement(front_bbo_record, pic_file, placedb, None)
+    draw_macro_placement(front_bbo_record, pic_file, placedb, m2m_flow)
 
 
 def draw_detailed_front_bbo(benchmark):
@@ -299,18 +317,19 @@ if __name__ == "__main__":
         "adaptec4",
         "bigblue1",
         "bigblue3",
-        # "bigblue4",
+        "bigblue4",
     ]
     for b in blist:
         draw_detailed_front_dreamplace_mixed(b)
+        draw_macro_front_dreamplace_mixed(b)
 
-        # draw_macro_refine_dreamplace_mixed(b)
+        draw_macro_refine_dreamplace_mixed(b)
         draw_detailed_refine_dreamplace_mixed(b)
 
-        # draw_macro_front_bbo(b)
+        draw_macro_front_bbo(b)
         draw_detailed_front_bbo(b)
 
-        # draw_macro_refine_bbo(b)
+        draw_macro_refine_bbo(b)
         draw_detailed_refine_bbo(b)
 
     #     draw_front_dreamplace(b)

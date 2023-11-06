@@ -108,11 +108,8 @@ def random_guiding(
     return place_record
 
 
-def rank_macros_area(
-    placedb: PlaceDB
-) -> List[
-    str
-]:  # 将macro按照固定顺序（net面积总和）从大到小排列，输出排序后的macro序列。
+def rank_macros_area(placedb: PlaceDB) -> List[str]:
+    # 将macro按照固定顺序（net面积总和）从大到小排列，输出排序后的macro序列。
     for net_name in placedb.net_info:
         sum_area = 0
         for node_name in placedb.net_info[net_name]["nodes"].keys():
@@ -128,8 +125,8 @@ def rank_macros_area(
                     "area"
                 ]  # 自己的面积被算了 #net 次？
 
-    node_name_ls = list(placedb.port_name) + sorted(
-        placedb.macro_name, key=lambda x: rank_area[x], reverse=True
+    node_name_ls = sorted(placedb.port_name) + sorted(
+        placedb.macro_name, key=lambda x: (rank_area[x], x), reverse=True
     )
     return node_name_ls
 
@@ -313,8 +310,6 @@ def cal_regularity(place_record: PlaceRecord, placedb: PlaceDB):
             min(
                 place_record[node_name].center_x,
                 (placedb.max_width - place_record[node_name].center_x),
-            )
-            + min(
                 place_record[node_name].center_y,
                 (placedb.max_height - place_record[node_name].center_y),
             )
@@ -656,12 +651,15 @@ def cal_regularity_mask(
     node_name1: str, placedb: PlaceDB, grid_num: int, grid_size: int
 ):
     regu_mask = np.zeros((grid_num, grid_num))
-    for row in range(grid_num):  # 欧氏距离需要对row和col进行遍历，计算量较大
+    for row in range(grid_num):
         pos_x = row * grid_size + 0.5 * placedb.node_info[node_name1].width
         for col in range(grid_num):
             pos_y = col * grid_size + 0.5 * placedb.node_info[node_name1].height
-            regu_mask[row, col] = min(pos_x, placedb.max_width - pos_x) + min(
-                pos_y, placedb.max_height - pos_y
+            # regu_mask[row, col] = min(pos_x, placedb.max_width - pos_x) + min(
+            #     pos_y, placedb.max_height - pos_y
+            # )
+            regu_mask[row, col] = min(
+                pos_x, placedb.max_width - pos_x, pos_y, placedb.max_height - pos_y
             )
     return regu_mask
 

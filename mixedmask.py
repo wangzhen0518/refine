@@ -25,8 +25,6 @@ from utils import (
 )
 
 rank_alpha, rank_beta = 0.8, 0.2
-evaluate_alpha, evaluate_beta, evaluate_gamma = 0.2, 0.8, 0
-mask_alpha, mask_beta, mask_gamma = 0.2, 0.8, 0
 
 
 def set_seed(seed: int):
@@ -94,7 +92,7 @@ class Disturbance:
         self.candidates = sorted(placedb.macro_name)
         m2m_file = os.path.join("benchmarks", placedb.benchmark, "macro2macro.csv")
         m2m_flow = get_m2m_flow(m2m_file)
-        self.priority = np.log(
+        self.priority = np.array(
             [sum(m2m_flow[node_name].values()) for node_name in self.candidates]
         )
         # self.priority = np.log(
@@ -224,6 +222,12 @@ def refine_EA(
     grid_size,
     m2m_flow,
     pl_file,
+    evaluate_alpha,
+    evaluate_beta,
+    evaluate_gamma,
+    mask_alpha,
+    mask_beta,
+    mask_gamma,
 ) -> Tuple[PlaceRecord, EvalRecord]:
     # benchmark = "adaptec1"
     # result_dir = os.path.join("results_macro_refine-EA_bbo", benchmark)
@@ -333,66 +337,66 @@ def refine_EA(
     return best_placed_record, best_eval
 
 
-def refine_iter(
-    iter_rounds,
-    placedb,
-    curve_file,
-    placement_file,
-    grid_num,
-    grid_size,
-    m2m_flow,
-    pl_file,
-) -> Tuple[PlaceRecord, EvalRecord]:
-    curve_fp = open(curve_file, "a+")
-    curve_writer = csv.writer(curve_fp)
-    node_id_ls = rank_macros_mixed_port(placedb, m2m_flow, rank_alpha, rank_beta)
+# def refine_iter(
+#     iter_rounds,
+#     placedb,
+#     curve_file,
+#     placement_file,
+#     grid_num,
+#     grid_size,
+#     m2m_flow,
+#     pl_file,
+# ) -> Tuple[PlaceRecord, EvalRecord]:
+#     curve_fp = open(curve_file, "a+")
+#     curve_writer = csv.writer(curve_fp)
+#     node_id_ls = rank_macros_mixed_port(placedb, m2m_flow, rank_alpha, rank_beta)
 
-    evaluator = Evaluator(evaluate_alpha, evaluate_beta, evaluate_gamma)
+#     evaluator = Evaluator(evaluate_alpha, evaluate_beta, evaluate_gamma)
 
-    place_record = pl2record(pl_file, placedb, grid_size)
-    eval_record = evaluator.evaluate(place_record, placedb, m2m_flow)
-    print("origin hpwl: ", eval_record.hpwl)
-    curve_writer.writerow(
-        [
-            eval_record.value,
-            eval_record.hpwl,
-            eval_record.dataflow,
-            eval_record.regularity,
-            time.time(),
-        ]
-    )
+#     place_record = pl2record(pl_file, placedb, grid_size)
+#     eval_record = evaluator.evaluate(place_record, placedb, m2m_flow)
+#     print("origin hpwl: ", eval_record.hpwl)
+#     curve_writer.writerow(
+#         [
+#             eval_record.value,
+#             eval_record.hpwl,
+#             eval_record.dataflow,
+#             eval_record.regularity,
+#             time.time(),
+#         ]
+#     )
 
-    is_legal = True
-    for i in range(iter_rounds):
-        print(i)
-        place_record_new, is_legal = mixed_placer(
-            node_id_ls,
-            placedb,
-            grid_num,
-            grid_size,
-            place_record,
-            m2m_flow,
-            mask_alpha,
-            mask_beta,
-            mask_gamma,
-        )
-        if not is_legal:
-            print("illegal")
-            break
-        eval_record = evaluator.evaluate(place_record, placedb, m2m_flow)
-        eval_record.show()
-        curve_writer.writerow(
-            [
-                eval_record.value,
-                eval_record.hpwl,
-                eval_record.dataflow,
-                eval_record.regularity,
-                time.time(),
-            ]
-        )
-        place_record = place_record_new
-    write_final_placement(place_record, eval_record.hpwl, placement_file)
-    return place_record, eval_record
+#     is_legal = True
+#     for i in range(iter_rounds):
+#         print(i)
+#         place_record_new, is_legal = mixed_placer(
+#             node_id_ls,
+#             placedb,
+#             grid_num,
+#             grid_size,
+#             place_record,
+#             m2m_flow,
+#             mask_alpha,
+#             mask_beta,
+#             mask_gamma,
+#         )
+#         if not is_legal:
+#             print("illegal")
+#             break
+#         eval_record = evaluator.evaluate(place_record, placedb, m2m_flow)
+#         eval_record.show()
+#         curve_writer.writerow(
+#             [
+#                 eval_record.value,
+#                 eval_record.hpwl,
+#                 eval_record.dataflow,
+#                 eval_record.regularity,
+#                 time.time(),
+#             ]
+#         )
+#         place_record = place_record_new
+#     write_final_placement(place_record, eval_record.hpwl, placement_file)
+#     return place_record, eval_record
 
 
 def main():
@@ -401,13 +405,19 @@ def main():
     parser.add_argument("--seed", default=2027)
     parser.add_argument("--iter_rounds", default=10)
     parser.add_argument("--front", default="bbo")
+    parser.add_argument("--alpha", default=0.3)
+    parser.add_argument("--beta", default=0.3)
+    parser.add_argument("--gamma", default=0.4)
+
     args = parser.parse_args()
     benchmark = args.dataset
     iter_rounds = int(args.iter_rounds)
     seed = int(args.seed)
-    front = args.front
-
     set_seed(seed)
+    front = args.front
+    evaluate_alpha = mask_alpha = float(args.alpha)
+    evaluate_beta = mask_beta = float(args.beta)
+    evaluate_gamma = mask_gamma = float(args.gamma)
 
     grid_num = grid_setting[benchmark]["grid_num"]
     grid_size = grid_setting[benchmark]["grid_size"]
@@ -447,6 +457,12 @@ def main():
         grid_size,
         m2m_flow,
         init_macro_pl_file,
+        evaluate_alpha,
+        evaluate_beta,
+        evaluate_gamma,
+        mask_alpha,
+        mask_beta,
+        mask_gamma,
     )
     write_pl_for_detailed(best_placed_macro, pl_file)
 

@@ -12,7 +12,6 @@ from utils import (
     rank_macros_area,
     wiremask_placer,
     write_final_placement,
-    write_pl_for_detailed,
     write_pl_for_refine,
     draw_macros,
 )
@@ -108,7 +107,7 @@ def main():
 
     curve_file = os.path.join(result_dir, f"curve_seed_{seed1}.csv")
     placement_file = os.path.join(result_dir, f"placement_seed_{seed1}.csv")
-    pl_file_for_detailed = os.path.join(result_dir, f"{benchmark}_for_detailed.gp.pl")
+    # pl_file_for_detailed = os.path.join(result_dir, f"{benchmark}_for_detailed.gp.pl")
     pl_file_for_refine = os.path.join(result_dir, f"{benchmark}.gp.pl")
 
     place_record, hpwl = bbo(
@@ -117,7 +116,7 @@ def main():
     if place_record:
         pic_file = os.path.join(result_dir, f"{benchmark}.png")
         draw_macros(placedb, placement_file, grid_size, None, pic_file)
-        write_pl_for_detailed(place_record, pl_file_for_detailed)
+        # write_pl_for_detailed(place_record, pl_file_for_detailed)
         write_pl_for_refine(place_record, placedb, pl_file_for_refine)
 
 

@@ -123,7 +123,7 @@ NumPins : {num_pins}
 def mixedsize_preprocessing(benchmark: str):
     print(benchmark)
     grid_size = grid_setting[benchmark]["grid_size"]
-    placedb = PlaceDB(benchmark, grid_size, boundary_radio=0.1)
+    placedb = PlaceDB(benchmark, grid_size)
 
     origin_benchmark_dir = os.path.join("benchmarks", benchmark)
     benchmarks_mixedsize_dir = os.path.join("benchmarks_mixedsize", benchmark)
@@ -168,7 +168,7 @@ def mixedsize_preprocessing(benchmark: str):
 def to_detailed_preprocessing(benchmark: str):
     print(benchmark)
     grid_size = grid_setting[benchmark]["grid_size"]
-    placedb = PlaceDB(benchmark, grid_size, boundary_radio=0.1)
+    placedb = PlaceDB(benchmark, grid_size)
 
     origin_benchmark_dir = os.path.join("benchmarks", benchmark)
     benchmarks_to_detailed_dir = os.path.join("benchmarks_to_detailed", benchmark)

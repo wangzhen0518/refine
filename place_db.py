@@ -150,7 +150,7 @@ def read_pl_file(fopen, node_info: Dict[str, Node]):
 
 
 class PlaceDB:
-    def __init__(self, benchmark="adaptec1", grid_size=1, boundary_radio: float = 0.01):
+    def __init__(self, benchmark="adaptec1", grid_size=1, boundary_radio: float = 0.1):
         self.benchmark = benchmark
         self.grid_size = grid_size
         assert os.path.exists(os.path.join("benchmarks", benchmark))
@@ -348,9 +348,12 @@ NumPins : {self.pin_cnt}
 
 
 if __name__ == "__main__":
+    from common import grid_setting
+
     parser = argparse.ArgumentParser(description="argparse testing")
     parser.add_argument("--dataset", required=True)
     args = parser.parse_args()
     dataset = args.dataset
-    placedb = PlaceDB(dataset)
+    grid_size = grid_setting[dataset]["grid_size"]
+    placedb = PlaceDB(dataset, grid_size)
     print(placedb.node_info)

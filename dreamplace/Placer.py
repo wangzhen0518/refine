@@ -10,6 +10,7 @@ import os
 import sys
 import time
 from typing import Tuple
+import argparse
 
 import matplotlib
 import numpy as np
@@ -93,14 +94,18 @@ def place(params):
     placedb = PlaceDB.PlaceDB()
     placedb(params)
 
-    is_origin = False
-    if not is_origin:
-        # csv_file = f"./datamask/result/EA_swap_only/placement/{params.design_name()}_seed_2027_wiremask.csv"
-        # pl_file = f"./results_macro_front_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
-        pl_file = (
-            f"./results_macro_refine-EA_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
-        )
-        read_pl_file(placedb, pl_file, params.shift_factor)
+    if params.type == "refine":
+        if params.method == "bbo":
+            pl_file = f"./results_macro_refine-EA_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
+        elif params.method == "dreamplace-mixed":
+            pl_file = f"./results_macro_refine-EA_dreamplace-mixed/{params.design_name()}/{params.design_name()}.gp.pl"
+        else:
+            raise NotImplementedError
+    elif params.type == "front" and params.method == "bbo":
+        pl_file = f"./results_macro_front_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
+    else:
+        raise NotImplementedError
+    read_pl_file(placedb, pl_file, params.shift_factor)
 
     logging.info("reading database takes %.2f seconds" % (time.time() - tt))
 
@@ -237,6 +242,11 @@ def place(params):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--type", required=True)
+    parser.add_argument("--method", required=True)
+    parser.add_argument("--config", required=True)
+    args = parser.parse_args()
     """
     @brief main function to invoke the entire placement flow.
     """
@@ -248,16 +258,19 @@ if __name__ == "__main__":
     )
     params = Params.Params()
     params.printWelcome()
-    if len(sys.argv) == 1 or "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
-        params.printHelp()
-        exit()
-    elif len(sys.argv) != 2:
-        logging.error("One input parameters in json format in required")
-        params.printHelp()
-        exit()
+    params.type = args.type
+    params.method = args.method
+    # if len(sys.argv) == 1 or "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
+    #     params.printHelp()
+    #     exit()
+    # elif len(sys.argv) != 2:
+    #     logging.error("One input parameters in json format in required")
+    #     params.printHelp()
+    #     exit()
 
     # load parameters
-    params.load(sys.argv[1])
+    # params.load(sys.argv[1])
+    params.load(args.config)
     logging.info("parameters = %s" % (params))
     # control numpy multithreading
     os.environ["OMP_NUM_THREADS"] = "%d" % (params.num_threads)

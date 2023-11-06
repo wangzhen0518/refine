@@ -306,12 +306,16 @@ def cal_dataflow(place_record: PlaceRecord, placedb: PlaceDB, m2m_flow: M2MFlow)
 def cal_regularity(place_record: PlaceRecord, placedb: PlaceDB):
     regularity = 0
     for node_name in placedb.macro_name:
+        left_x = place_record[node_name].bottom_left_x
+        right_x = place_record[node_name].bottom_left_x + place_record[node_name].width
+        bottom_y = place_record[node_name].bottom_left_y
+        top_y = place_record[node_name].bottom_left_y + place_record[node_name].height
         regularity += placedb.node_info[node_name].area * (
             min(
-                place_record[node_name].center_x,
-                (placedb.max_width - place_record[node_name].center_x),
-                place_record[node_name].center_y,
-                (placedb.max_height - place_record[node_name].center_y),
+                left_x,
+                (placedb.max_width - right_x),
+                bottom_y,
+                (placedb.max_height - top_y),
             )
         )
     return regularity
@@ -652,14 +656,21 @@ def cal_regularity_mask(
 ):
     regu_mask = np.zeros((grid_num, grid_num))
     for row in range(grid_num):
-        pos_x = row * grid_size + 0.5 * placedb.node_info[node_name1].width
+        left_x = row * grid_size
+        right_x = row * grid_size + placedb.node_info[node_name1].width
+        # pos_x = row * grid_size + 0.5 * placedb.node_info[node_name1].width
         for col in range(grid_num):
-            pos_y = col * grid_size + 0.5 * placedb.node_info[node_name1].height
+            bottom_y = col * grid_size
+            top_y = col * grid_size + placedb.node_info[node_name1].height
+            # pos_y = col * grid_size + 0.5 * placedb.node_info[node_name1].height
             # regu_mask[row, col] = min(pos_x, placedb.max_width - pos_x) + min(
             #     pos_y, placedb.max_height - pos_y
             # )
             regu_mask[row, col] = min(
-                pos_x, placedb.max_width - pos_x, pos_y, placedb.max_height - pos_y
+                left_x,
+                placedb.max_width - right_x,
+                bottom_y,
+                placedb.max_height - top_y,
             )
     return regu_mask
 

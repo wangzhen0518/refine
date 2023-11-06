@@ -25,8 +25,8 @@ from utils import (
 )
 
 rank_alpha, rank_beta = 0.8, 0.2
-evaluate_alpha, evaluate_beta, evaluate_gamma = 0.6, 0.3, 0.1
-mask_alpha, mask_beta, mask_gamma = 0.6, 0.3, 0.1
+evaluate_alpha, evaluate_beta, evaluate_gamma = 0.2, 0.8, 0
+mask_alpha, mask_beta, mask_gamma = 0.2, 0.8, 0
 
 
 def set_seed(seed: int):
@@ -92,14 +92,16 @@ def swap(node1: Record, node2: Record, grid_size: int):
 class Disturbance:
     def __init__(self, placedb: PlaceDB) -> None:
         self.candidates = sorted(placedb.macro_name)
+        m2m_file = os.path.join("benchmarks", placedb.benchmark, "macro2macro.csv")
+        m2m_flow = get_m2m_flow(m2m_file)
         self.priority = np.log(
-            np.array(
-                [
-                    placedb.node_info[node_name].area
-                    for node_name in self.candidates
-                ]
-            )
+            [sum(m2m_flow[node_name].values()) for node_name in self.candidates]
         )
+        # self.priority = np.log(
+        #     np.array(
+        #         [placedb.node_info[node_name].area for node_name in self.candidates]
+        #     )
+        # )
         self.priority /= np.sum(self.priority)
         self.action_record = None
 
@@ -115,42 +117,6 @@ class Disturbance:
     def recover(self, place_record: PlaceRecord, grid_size: int):
         node_name1, node_name2 = self.action_record
         swap(place_record[node_name1], place_record[node_name2], grid_size)
-
-
-# #! TODO 重构，改为类的实现方式，合并 disturbance 和 recover
-# def disturbance(
-#     place_record: PlaceRecord, placedb: PlaceDB, grid_size: int
-# ) -> Tuple[str, str]:
-#     if not hasattr(disturbance, "candidates"):
-#         disturbance.candidates = sorted(placedb.macro_name)
-#         disturbance.priority = np.log(
-#             np.array(
-#                 [
-#                     placedb.node_info[node_name].area
-#                     for node_name in disturbance.candidates
-#                 ]
-#             )
-#         )
-#         disturbance.priority /= np.sum(disturbance.priority)
-#         # disturbance.priority = np.ones(len(place_record)) / len(place_record)
-
-#     node_name1, node_name2 = np.random.choice(
-#         disturbance.candidates, 2, replace=False, p=disturbance.priority
-#     )
-#     print(node_name1, node_name2)
-#     # node_name1, node_name2 = random.sample(disturbance.candidates, 2)
-#     swap(place_record[node_name1], place_record[node_name2], grid_size)
-#     return (node_name1, node_name2)
-
-
-# def recover(
-#     place_record: PlaceRecord,
-#     action_record: Tuple[str, str],
-#     placedb: PlaceDB,
-#     grid_size,
-# ):
-#     node_name1, node_name2 = action_record
-#     swap(place_record[node_name1], place_record[node_name2], grid_size)
 
 
 class EvalRecord:
@@ -454,7 +420,7 @@ def main():
             "results_macro_front_bbo", benchmark, f"{benchmark}.gp.pl"
         )
         result_dir = os.path.join("results_macro_refine-EA_bbo", benchmark)
-    elif front == "dreamplace":
+    elif front == "dreamplace-mixed":
         init_macro_pl_file = os.path.join(
             "results_detailed_front_dreamplace-mixed", benchmark, f"{benchmark}.gp.pl"
         )

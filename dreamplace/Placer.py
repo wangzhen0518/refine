@@ -78,6 +78,22 @@ def read_pl_file(
     return placedb
 
 
+def read_dreamplace_pl_file(
+    placedb: PlaceDB.PlaceDB, pl_file: str, shift_factor: Tuple[float, float]
+):
+    with open(pl_file, encoding="utf8") as f:
+        for line in f:
+            if line.startswith("o"):
+                line = line.strip().split()
+                node_name = line[0]
+                bottom_left_x, bottom_left_y = int(line[1]), int(line[2])
+                if node_name in placedb.fixed_node_name:
+                    idx = placedb.node_name2id_map[node_name]
+                    placedb.node_x[idx] = bottom_left_x - shift_factor[0]
+                    placedb.node_y[idx] = bottom_left_y - shift_factor[1]
+    return placedb
+
+
 def place(params):
     """
     @brief Top API to run the entire placement flow.
@@ -94,18 +110,22 @@ def place(params):
     placedb = PlaceDB.PlaceDB()
     placedb(params)
 
-    if params.type == "refine":
-        if params.method == "bbo":
-            pl_file = f"./results_macro_refine-EA_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
-        elif params.method == "dreamplace-mixed":
-            pl_file = f"./results_macro_refine-EA_dreamplace-mixed/{params.design_name()}/{params.design_name()}.gp.pl"
+    if params.type == "front" and params.method == "dreamplace-mixed":
+        pl_file = f"./results_macro_front_dreamplace-mixed/{params.design_name()}/{params.design_name()}.gp.pl"
+        read_dreamplace_pl_file(placedb, pl_file, params.shift_factor)
+    else:
+        if params.type == "front" and params.method == "bbo":
+            pl_file = f"./results_macro_front_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
+        elif params.type == "refine":
+            if params.method == "bbo":
+                pl_file = f"./results_macro_refine-EA_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
+            elif params.method == "dreamplace-mixed":
+                pl_file = f"./results_macro_refine-EA_dreamplace-mixed/{params.design_name()}/{params.design_name()}.gp.pl"
+            else:
+                raise NotImplementedError
         else:
             raise NotImplementedError
-    elif params.type == "front" and params.method == "bbo":
-        pl_file = f"./results_macro_front_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
-    else:
-        raise NotImplementedError
-    read_pl_file(placedb, pl_file, params.shift_factor)
+        read_pl_file(placedb, pl_file, params.shift_factor)
 
     logging.info("reading database takes %.2f seconds" % (time.time() - tt))
 

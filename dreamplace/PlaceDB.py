@@ -566,6 +566,7 @@ class PlaceDB(object):
         self.num_terminal_NIs = pydb.num_terminal_NIs
         self.node_name2id_map = pydb.node_name2id_map
         self.node_names = np.array(pydb.node_names, dtype=np.string_)
+        self.fixed_node_indices = self.rawdb.fixedNodeIndices()
         # If the placer directly takes a global placement solution,
         # the cell positions may still be floating point numbers.
         # It is not good to use the place_io OP to round the positions.
@@ -695,6 +696,9 @@ class PlaceDB(object):
         # convert the max_net_weight from params
         # note that infinity may be included so we need a type cast
         self.max_net_weight = np.float64(params.max_net_weight)
+        self.fixed_node_name = set(
+            [self.node_names[i].decode() for i in self.fixed_node_indices]
+        )
 
     def initialize_num_bins(self, params):
         """

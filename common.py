@@ -23,3 +23,18 @@ shift_factor = {
 }
 
 my_inf = 1e12
+
+method_list = [
+    "bbo",
+    "dreamplace-mixed",
+]
+
+benchmark_list = [
+    "adaptec1",
+    "adaptec2",
+    "adaptec3",
+    "adaptec4",
+    "bigblue1",
+    "bigblue3",
+    "bigblue4",
+]

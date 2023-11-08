@@ -21,7 +21,7 @@ def extract_one_log(file_name: str) -> Tuple[float, float]:
     return hpwl, overflow
 
 
-def extract_all(method_list: List[str], benchmark_list: List[str]):
+def extract_all(method_list: List[str], benchmark_list: List[str], dirbase: str = ""):
     tmp = []
     for method in method_list:
         tmp.append(method)
@@ -31,9 +31,9 @@ def extract_all(method_list: List[str], benchmark_list: List[str]):
     df_congestion = pd.DataFrame(index=method_list, columns=benchmark_list)
     for method in method_list:
         if "refine" in method:
-            dirname = f"results_detailed_{method}"
+            dirname = os.path.join(dirbase, f"results_detailed_{method}")
         else:
-            dirname = f"results_detailed_front_{method}"
+            dirname = os.path.join(dirbase, f"results_detailed_front_{method}")
         for benchmark in benchmark_list:
             file_name = os.path.join(dirname, benchmark, "result.log")
             hpwl, overflow = extract_one_log(file_name)
@@ -42,6 +42,7 @@ def extract_all(method_list: List[str], benchmark_list: List[str]):
             df_congestion.loc[method, benchmark] = overflow
     df_hpwl.to_csv("results_hpwl.csv")
     df_congestion.to_csv("results_congestion.csv")
+    return df_hpwl, df_congestion
 
 
 if __name__ == "__main__":
@@ -55,4 +56,5 @@ if __name__ == "__main__":
         "bigblue3",
         "bigblue4",
     ]
-    extract_all(method_list, benchmark_list)
+
+    df_hpwl, df_congestion = extract_all(method_list, benchmark_list)

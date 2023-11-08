@@ -90,16 +90,16 @@ def swap(node1: Record, node2: Record, grid_size: int):
 class Disturbance:
     def __init__(self, placedb: PlaceDB) -> None:
         self.candidates = sorted(placedb.macro_name)
-        m2m_file = os.path.join("benchmarks", placedb.benchmark, "macro2macro.csv")
-        m2m_flow = get_m2m_flow(m2m_file)
-        self.priority = np.array(
-            [sum(m2m_flow[node_name].values()) for node_name in self.candidates]
-        )
-        # self.priority = np.log(
-        #     np.array(
-        #         [placedb.node_info[node_name].area for node_name in self.candidates]
-        #     )
+        # m2m_file = os.path.join("benchmarks", placedb.benchmark, "macro2macro.csv")
+        # m2m_flow = get_m2m_flow(m2m_file)
+        # self.priority = np.array(
+        #     [sum(m2m_flow[node_name].values()) for node_name in self.candidates]
         # )
+        self.priority = np.log(
+            np.array(
+                [placedb.node_info[node_name].area for node_name in self.candidates]
+            )
+        )
         self.priority /= np.sum(self.priority)
         self.action_record = None
 

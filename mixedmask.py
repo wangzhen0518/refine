@@ -3,6 +3,7 @@ import csv
 import os
 import random
 import time
+import copy
 from typing import Tuple
 
 import numpy as np
@@ -17,6 +18,7 @@ from utils import (
     cal_hpwl,
     cal_regularity,
     draw_macros,
+    draw_macro_placement,
     get_m2m_flow,
     mixed_placer,
     rank_macros_mixed_port,
@@ -90,27 +92,28 @@ def swap(node1: Record, node2: Record, grid_size: int):
 class Disturbance:
     def __init__(self, placedb: PlaceDB) -> None:
         self.candidates = sorted(placedb.macro_name)
-        # m2m_file = os.path.join("benchmarks", placedb.benchmark, "macro2macro.csv")
-        # m2m_flow = get_m2m_flow(m2m_file)
-        # self.priority = np.array(
-        #     [sum(m2m_flow[node_name].values()) for node_name in self.candidates]
-        # )
-        self.priority = np.log(
-            np.array(
-                [placedb.node_info[node_name].area for node_name in self.candidates]
-            )
+        m2m_file = os.path.join("benchmarks", placedb.benchmark, "macro2macro.csv")
+        m2m_flow = get_m2m_flow(m2m_file)
+        self.priority = np.array(
+            [sum(m2m_flow[node_name].values()) for node_name in self.candidates]
         )
+        # self.priority = np.log(
+        #     np.array(
+        #         [placedb.node_info[node_name].area for node_name in self.candidates]
+        #     )
+        # )
         self.priority /= np.sum(self.priority)
         self.action_record = None
 
     def disturbance(self, place_record: PlaceRecord, grid_size: int):
+        place_record_new = copy.deepcopy(place_record)
         node_name1, node_name2 = np.random.choice(
             self.candidates, 2, replace=False, p=self.priority
         )
         print(node_name1, node_name2)
-        swap(place_record[node_name1], place_record[node_name2], grid_size)
+        swap(place_record_new[node_name1], place_record_new[node_name2], grid_size)
         self.action_record = (node_name1, node_name2)
-        return (node_name1, node_name2)
+        return place_record_new, node_name1, node_name2
 
     def recover(self, place_record: PlaceRecord, grid_size: int):
         node_name1, node_name2 = self.action_record
@@ -215,7 +218,7 @@ def evaluate(
 
 def refine_EA(
     iter_rounds,
-    placedb,
+    placedb: PlaceDB,
     curve_file,
     placement_file,
     grid_num,
@@ -229,13 +232,14 @@ def refine_EA(
     mask_beta,
     mask_gamma,
 ) -> Tuple[PlaceRecord, EvalRecord]:
-    # benchmark = "adaptec1"
-    # result_dir = os.path.join("results_macro_refine-EA_bbo", benchmark)
+    # benchmark = "adaptec3"
+    # result_dir = os.path.join("results_macro_refine-EA_dreamplace-mixed", benchmark)
     # pic_file = os.path.join(result_dir, f"{benchmark}.png")
 
     curve_fp = open(curve_file, "a+")
     curve_writer = csv.writer(curve_fp)
-    node_id_ls = rank_macros_mixed_port(placedb, m2m_flow, rank_alpha, rank_beta)
+    node_id_ls = rank_macros_mixed_port(placedb, m2m_flow, 1, 0)
+    # print(node_id_ls)
 
     evaluator = Evaluator(evaluate_alpha, evaluate_beta, evaluate_gamma)
     disturbancer = Disturbance(placedb)
@@ -255,47 +259,24 @@ def refine_EA(
     write_final_placement(place_record, my_inf, placement_file)
     # draw_macros(placedb, placement_file, grid_size, m2m_flow, pic_file)
 
-    # 第一轮调整，判断是否有可行解
-    # print("first round")
-    # place_record, is_legal = mixed_placer(
-    #     node_id_ls,
-    #     placedb,
-    #     grid_num,
-    #     grid_size,
-    #     place_record,
-    #     m2m_flow,
-    #     mask_alpha,
-    #     mask_beta,
-    #     mask_gamma,
-    # )
-    # if not is_legal:
-    #     print("no legal solution")
-    #     write_final_placement(place_record, my_inf, placement_file)
-    #     draw_macros(placedb, placement_file, grid_size, m2m_flow, pic_file)
-    #     return place_record, eval_record
-    # eval_record = evaluator.evaluate(place_record, placedb, m2m_flow)
-    # eval_record.show()
-    # curve_writer.writerow(
-    #     [
-    #         eval_record.value,
-    #         eval_record.hpwl,
-    #         eval_record.dataflow,
-    #         eval_record.regularity,
-    #         time.time(),
-    #     ]
-    # )
-
     # EA 迭代
     best_placed_record, best_eval = place_record, eval_record
     for i in range(iter_rounds):
         print(i)
-        disturbancer.disturbance(place_record, grid_size)
+        place_record_new, node_name1, node_name2 = disturbancer.disturbance(
+            place_record, grid_size
+        )
+        node_id_ls_new = node_id_ls.copy()
+        node_id_ls_new.remove(node_name1)
+        node_id_ls_new.remove(node_name2)
+        node_id_ls_new.insert(placedb.port_cnt, node_name2)
+        node_id_ls_new.insert(placedb.port_cnt, node_name1)
         place_record_new, is_legal = mixed_placer(
-            node_id_ls,
+            node_id_ls_new,
             placedb,
             grid_num,
             grid_size,
-            place_record,
+            place_record_new,
             m2m_flow,
             mask_alpha,
             mask_beta,
@@ -321,7 +302,7 @@ def refine_EA(
             # draw_macros(placedb, placement_file, grid_size, m2m_flow, pic_file)
         else:
             print("Recover\n")
-            disturbancer.recover(place_record, grid_size)
+            # disturbancer.recover(place_record, grid_size)
     curve_writer.writerow(
         [
             best_eval.value,
@@ -335,68 +316,6 @@ def refine_EA(
     curve_fp.flush()
     write_final_placement(best_placed_record, best_eval.hpwl, placement_file)
     return best_placed_record, best_eval
-
-
-# def refine_iter(
-#     iter_rounds,
-#     placedb,
-#     curve_file,
-#     placement_file,
-#     grid_num,
-#     grid_size,
-#     m2m_flow,
-#     pl_file,
-# ) -> Tuple[PlaceRecord, EvalRecord]:
-#     curve_fp = open(curve_file, "a+")
-#     curve_writer = csv.writer(curve_fp)
-#     node_id_ls = rank_macros_mixed_port(placedb, m2m_flow, rank_alpha, rank_beta)
-
-#     evaluator = Evaluator(evaluate_alpha, evaluate_beta, evaluate_gamma)
-
-#     place_record = pl2record(pl_file, placedb, grid_size)
-#     eval_record = evaluator.evaluate(place_record, placedb, m2m_flow)
-#     print("origin hpwl: ", eval_record.hpwl)
-#     curve_writer.writerow(
-#         [
-#             eval_record.value,
-#             eval_record.hpwl,
-#             eval_record.dataflow,
-#             eval_record.regularity,
-#             time.time(),
-#         ]
-#     )
-
-#     is_legal = True
-#     for i in range(iter_rounds):
-#         print(i)
-#         place_record_new, is_legal = mixed_placer(
-#             node_id_ls,
-#             placedb,
-#             grid_num,
-#             grid_size,
-#             place_record,
-#             m2m_flow,
-#             mask_alpha,
-#             mask_beta,
-#             mask_gamma,
-#         )
-#         if not is_legal:
-#             print("illegal")
-#             break
-#         eval_record = evaluator.evaluate(place_record, placedb, m2m_flow)
-#         eval_record.show()
-#         curve_writer.writerow(
-#             [
-#                 eval_record.value,
-#                 eval_record.hpwl,
-#                 eval_record.dataflow,
-#                 eval_record.regularity,
-#                 time.time(),
-#             ]
-#         )
-#         place_record = place_record_new
-#     write_final_placement(place_record, eval_record.hpwl, placement_file)
-#     return place_record, eval_record
 
 
 def main():
@@ -421,7 +340,10 @@ def main():
 
     grid_num = grid_setting[benchmark]["grid_num"]
     grid_size = grid_setting[benchmark]["grid_size"]
+
     placedb = PlaceDB(benchmark, grid_size)
+    placedb.deal_center_core(scale_factor=1.2)
+    placedb.deal_virtual_boundary(scale_factor=0.8)
     print("#port", placedb.port_cnt)
     print("#macro", len(placedb.macro_name))
 

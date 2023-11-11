@@ -1,8 +1,9 @@
 import argparse
 import math
 import os
+import numpy as np
 
-from typing import Dict
+from typing import Dict, Tuple
 
 normal_set = {"adaptec1", "adaptec2", "bigblue1"}
 delete_set = {"adaptec3", "adaptec4", "bigblue3", "bigblue4"}
@@ -47,23 +48,26 @@ class Port:
         pass
 
 
-def read_node_file(fopen, grid_size) -> Dict[str, Node]:
+def read_node_file(fopen, grid_size):
     node_info: Dict[str, Node] = {}
     node_cnt = 0
+    cell_area = 0
     for line in fopen.readlines():
-        if not line.startswith("\t") and not line.startswith(" "):
-            continue
-        line = line.strip().split()
-        if line[-1] == "terminal":
+        line = line.strip()
+        if line.startswith("o"):
+            line = line.split()
             node_name = line[0]
             width = int(line[1])
             height = int(line[2])
-            node_info[node_name] = Node(
-                node_cnt, node_name, 0, 0, width, height, grid_size
-            )
-            node_cnt += 1
+            if line[-1] == "terminal":
+                node_info[node_name] = Node(
+                    node_cnt, node_name, 0, 0, width, height, grid_size
+                )
+                node_cnt += 1
+            else:
+                cell_area += width * height
     print("len node_info", len(node_info))
-    return node_info
+    return node_info, cell_area
 
 
 def read_net_file(fopen, node_info):
@@ -128,24 +132,24 @@ def read_pl_file(fopen, node_info: Dict[str, Node]):
     min_height = 999999
     min_width = 999999
     for line in fopen.readlines():
-        if not line.startswith("o"):
-            continue
-        line = line.strip().split()
-        node_name = line[0]
-        if node_name not in node_info:
-            continue
-        bottom_left_x = int(line[1])
-        bottom_left_y = int(line[2])
-        node_info[node_name].bottom_left_x = bottom_left_x
-        node_info[node_name].bottom_left_y = bottom_left_y
-        max_height = max(
-            max_height, node_info[node_name].width + node_info[node_name].bottom_left_x
-        )
-        max_width = max(
-            max_width, node_info[node_name].height + node_info[node_name].bottom_left_y
-        )
-        min_height = min(min_height, node_info[node_name].bottom_left_x)
-        min_width = min(min_width, node_info[node_name].bottom_left_y)
+        if line.startswith("o"):
+            line = line.strip().split()
+            node_name = line[0]
+            bottom_left_x = int(line[1])
+            bottom_left_y = int(line[2])
+            if node_name in node_info:
+                node_info[node_name].bottom_left_x = bottom_left_x
+                node_info[node_name].bottom_left_y = bottom_left_y
+                max_height = max(
+                    max_height,
+                    node_info[node_name].width + node_info[node_name].bottom_left_x,
+                )
+                max_width = max(
+                    max_width,
+                    node_info[node_name].height + node_info[node_name].bottom_left_y,
+                )
+                min_height = min(min_height, node_info[node_name].bottom_left_x)
+                min_width = min(min_width, node_info[node_name].bottom_left_y)
     return max(max_height, max_width), max(max_height, max_width), min_height, min_width
 
 
@@ -157,7 +161,7 @@ class PlaceDB:
         node_file = open(
             os.path.join("benchmarks", benchmark, benchmark + ".nodes"), "r"
         )
-        self.node_info = read_node_file(node_file, grid_size)
+        self.node_info, self.cell_area = read_node_file(node_file, grid_size)
         self.node_cnt = len(self.node_info)
         node_file.close()
 
@@ -175,6 +179,9 @@ class PlaceDB:
         self.aver_area = (
             sum([ni.area for ni in self.node_info.values()]) / self.node_cnt
         )
+
+        self.center_core = False
+        self.virtual_boundary = False
 
         # if grid_size == 1:
         #     min_width = min([ni.width for ni in self.node_info.values()])
@@ -277,6 +284,17 @@ class PlaceDB:
             for node in self.node_list():
                 f.write(f"\t{node.name}\t{node.width}\t{node.height}\tterminal\n")
 
+    def write_nodes_pure_pam(self, file: str):
+        """区分macro和port，结尾不写terminal，而是macro/port"""
+        with open(file, "a", encoding="utf8") as f:
+            for node in self.node_list():
+                f.write(f"\t{node.name}\t{node.width}\t{node.height}")
+                if node.is_port:
+                    f.write("\tport")
+                else:
+                    f.write("\tmacro")
+                f.write("\n")
+
     def write_nodes(self, file: str):
         with open(file, "w", encoding="utf8") as f:
             f.write(
@@ -308,6 +326,17 @@ NumTerminals : 		{self.port_cnt}
                 f.write(
                     f"{node.name}\t{node.bottom_left_x}\t{node.bottom_left_y}\t: N /FIXED\n"
                 )
+
+    def write_pl_pure_pam(self, file: str):
+        """区分macro和port，结尾不写FIXED，而是macro/port"""
+        with open(file, "a", encoding="utf8") as f:
+            for node in self.node_list():
+                f.write(f"{node.name}\t{node.bottom_left_x}\t{node.bottom_left_y}\t: N")
+                if node.is_port:
+                    f.write("\tport")
+                else:
+                    f.write("\tmacro")
+                f.write("\n")
 
     def write_pl(self, file: str):
         with open(file, "w", encoding="utf8") as f:
@@ -345,6 +374,29 @@ NumPins : {self.pin_cnt}
             )
             f.write("\n")
         self.write_nets_pure(file)
+
+    def deal_center_core(self, scale_factor=1.25):
+        self.center_core = True
+        self.r = np.sqrt(scale_factor * self.cell_area / np.pi)
+        self.center_x = self.max_width / 2
+        self.center_y = self.max_height / 2
+        self.L2 = (self.center_x - self.r) * self.r
+        # self.L2 = self.center_x * self.center_x
+
+    def deal_virtual_boundary(self, scale_factor=1.25):
+        self.virtual_boundary = True
+        self.macro_area = np.sum([self.node_info[ni].area for ni in self.macro_name])
+        # self.port_area = np.sum([self.node_info[ni].area for ni in self.port_name])
+        total_area = self.cell_area + self.macro_area  # + self.port_area
+        self.boundary_length = np.sqrt(total_area * scale_factor)
+        self.left_boundary = max(0, self.center_x - self.boundary_length / 2)
+        self.right_boundary = min(
+            self.max_width, self.center_x + self.boundary_length / 2
+        )
+        self.bottom_boundary = max(0, self.center_y - self.boundary_length / 2)
+        self.top_boundary = min(
+            self.max_height, self.center_y + self.boundary_length / 2
+        )
 
 
 if __name__ == "__main__":

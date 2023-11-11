@@ -143,11 +143,15 @@ def rank_macros_mixed_port(
 
     rank_area = {node_name: 0 for node_name in placedb.macro_name}
     if alpha > 0:
-        for net_name in placedb.net_info:
-            for node_name in placedb.net_info[net_name]["nodes"].keys():
-                if node_name in rank_area:
-                    # 自己的面积被算了 #net 次？
-                    rank_area[node_name] += placedb.net_info[net_name]["area"]
+        # for net_name in placedb.net_info:
+        #     for node_name in placedb.net_info[net_name]["nodes"].keys():
+        #         if node_name in rank_area:
+        #             # 自己的面积被算了 #net 次？
+        #             rank_area[node_name] += placedb.net_info[net_name]["area"]
+        rank_area = {
+            node_name: placedb.node_info[node_name].area
+            for node_name in placedb.macro_name
+        }
         nomalize_list = np.array(list(rank_area.values()))
         aver = np.average(nomalize_list)
         std = np.std(nomalize_list)
@@ -264,24 +268,16 @@ def cal_hpwl(place_record: PlaceRecord, placedb) -> float:
 
 
 def get_m2m_flow(m2m_flow_file, threshold=1e-2) -> M2MFlow:
-    df = pd.read_csv(m2m_flow_file)
-    # m2m_flow_matrix = df.values
-    # m2m_flow_matrix = df.iloc[:, 1:]
-
-    # num_macro = len(df.index)
-    # m2m_flow = [[] for _ in range(num_macro)]
+    df = pd.read_csv(m2m_flow_file, index_col=0)
     m2m_flow = {}
-    for mi in df.columns[1:]:
+    for mi in df.index:
         m2m_flow[mi] = {}
-    x, y = np.where(df.iloc[:, 1:] >= threshold)
-    y += 1  # 0列是 macro name
-    # for id1, id2 in zip(*np.where(m2m_flow_matrix >= err)):
+    x, y = np.where(df >= threshold)
     for id1, id2 in zip(x, y):
-        m1_name = df.columns[id1 + 1]
+        m1_name = df.columns[id1]
         m2_name = df.columns[id2]
-        m2m_flow[m1_name][m2_name] = df.iloc[id1, id2]
-
-    # m2m_flow = m2m_flow_matrix
+        df12 = max(df.iloc[id1, id2], df.iloc[id2, id1])
+        m2m_flow[m1_name][m2_name] = m2m_flow[m2_name][m1_name] = df12
     return m2m_flow
 
 
@@ -310,15 +306,28 @@ def cal_regularity(place_record: PlaceRecord, placedb: PlaceDB):
         right_x = place_record[node_name].bottom_left_x + place_record[node_name].width
         bottom_y = place_record[node_name].bottom_left_y
         top_y = place_record[node_name].bottom_left_y + place_record[node_name].height
-        regularity += placedb.node_info[node_name].area * (
-            min(
-                left_x,
-                (placedb.max_width - right_x),
-                bottom_y,
-                (placedb.max_height - top_y),
-            )
+        regularity += placedb.node_info[node_name].area * cal_pos_regularity(
+            left_x, right_x, bottom_y, top_y, node_name, placedb
         )
     return regularity
+
+
+def cal_pos_regularity(left_x, right_x, bottom_y, top_y, node_name, placedb: PlaceDB):
+    center_x = left_x + 0.5 * placedb.node_info[node_name].width
+    center_y = bottom_y + 0.5 * placedb.node_info[node_name].height
+    dist = distance.euclidean(
+        (center_x, center_y), (placedb.center_x, placedb.center_y)
+    )
+    if dist > placedb.r:
+        regu = min(
+            abs(left_x - placedb.left_boundary),
+            abs(placedb.right_boundary - right_x),
+            abs(bottom_y - placedb.bottom_boundary),
+            abs(placedb.top_boundary - top_y),
+        )
+    else:
+        regu = placedb.L2 / (dist + 1e-5)
+    return regu
 
 
 def df_mul(d, df):
@@ -342,20 +351,11 @@ def cal_datamask(
     data_mask = np.zeros((grid_num, grid_num))
     for node_name2 in m2m_flow[node_name1]:
         # 在 m2m_flow 中的点，可能是被删除的 port，所以需要标记是否有效
-        is_valid = False
         if node_name2 in place_record:
             pos_x2, pos_y2 = (
                 place_record[node_name2].center_x,
                 place_record[node_name2].center_y,
             )
-            is_valid = True
-        elif node_name2 in place_record_old:
-            pos_x2, pos_y2 = (
-                place_record_old[node_name2].center_x,
-                place_record_old[node_name2].center_y,
-            )
-            is_valid = True
-        if is_valid:
             for col in range(grid_num):
                 # 改为使用曼哈顿距离，减少对 row 的遍历，降低计算量
                 row = col
@@ -368,17 +368,6 @@ def cal_datamask(
                     abs(pos_y2 - pos_y), m2m_flow[node_name1][node_name2]
                 )
 
-        # for row in range(grid_num):  # 欧氏距离需要对row和col进行遍历，计算量较大
-        #     pos_x = row * grid_size + 0.5 * placedb.node_info[node_name1].width
-        #     for col in range(grid_num):
-        #         pos_y = col * grid_size + 0.5 * placedb.node_info[node_name1].height
-        #         data_mask[row, col] += df_func(
-        #             distance.euclidean(
-        #                 (pos_x, pos_y),
-        #                 (pos_x2, pos_y2),
-        #             ),
-        #             m2m_flow[node_name1][node_name2],
-        #         )
     return data_mask
 
 
@@ -658,19 +647,11 @@ def cal_regularity_mask(
     for row in range(grid_num):
         left_x = row * grid_size
         right_x = row * grid_size + placedb.node_info[node_name1].width
-        # pos_x = row * grid_size + 0.5 * placedb.node_info[node_name1].width
         for col in range(grid_num):
             bottom_y = col * grid_size
             top_y = col * grid_size + placedb.node_info[node_name1].height
-            # pos_y = col * grid_size + 0.5 * placedb.node_info[node_name1].height
-            # regu_mask[row, col] = min(pos_x, placedb.max_width - pos_x) + min(
-            #     pos_y, placedb.max_height - pos_y
-            # )
-            regu_mask[row, col] = min(
-                left_x,
-                placedb.max_width - right_x,
-                bottom_y,
-                placedb.max_height - top_y,
+            regu_mask[row, col] = cal_pos_regularity(
+                left_x, right_x, bottom_y, top_y, node_name1, placedb
             )
     return regu_mask
 
@@ -790,20 +771,56 @@ def write_final_placement(best_placed_macro: PlaceRecord, best_hpwl, dir):
     csv_file2.close()
 
 
+def draw_regularity(ax, placedb: PlaceDB):
+    if placedb.center_core:
+        ax.add_patch(
+            patches.Circle(
+                (0.5, 0.5),
+                placedb.r / placedb.max_width,
+                linewidth=1,
+                edgecolor="orange",
+                fill=False,
+            )
+        )
+    if placedb.virtual_boundary:
+        ax.add_patch(
+            patches.Rectangle(
+                (
+                    placedb.left_boundary / placedb.max_width,
+                    placedb.bottom_boundary / placedb.max_height,
+                ),
+                (placedb.boundary_length) / placedb.max_width,
+                (placedb.boundary_length) / placedb.max_height,
+                linewidth=1,
+                edgecolor="red",
+                fill=False,
+            )
+        )
+
+
 def draw_macro_placement(
-    place_record: PlaceRecord, file_path, placedb: PlaceDB, m2m_flow: M2MFlow = None
+    place_record: PlaceRecord,
+    file_path,
+    placedb: PlaceDB,
+    m2m_flow: M2MFlow = None,
+    draw_id: bool = True,
 ):
     fig = plt.figure()
     ax = fig.add_axes([0, 0, 1, 1], frameon=True, aspect=1.0)
     ax.xaxis.set_visible(False)
     ax.yaxis.set_visible(False)
     ax.margins(x=0, y=0)
+
     for node_name in place_record:
         width, height = place_record[node_name].width, place_record[node_name].height
         x, y = (
             place_record[node_name].bottom_left_x,
             place_record[node_name].bottom_left_y,
         )
+        if not placedb.node_info[node_name].is_port:  # macro 用绿色
+            color = "tab:green"
+        else:  # port 用蓝色
+            color = "cyan"
         ax.add_patch(
             patches.Rectangle(
                 (x / placedb.max_width, y / placedb.max_height),  # (x,y)
@@ -812,12 +829,12 @@ def draw_macro_placement(
                 linewidth=0.1,
                 edgecolor="k",
                 alpha=0.9,
-                facecolor="tab:green",
+                facecolor=color,
             )
         )
         cx = (x + width / 2) / placedb.max_width
         cy = (y + height / 2) / placedb.max_height
-        if not placedb.node_info[node_name].is_port:
+        if (not placedb.node_info[node_name].is_port) and draw_id:
             ax.annotate(
                 placedb.node_info[node_name].name,
                 (x / placedb.max_width, y / placedb.max_height),
@@ -829,22 +846,33 @@ def draw_macro_placement(
                 va="center",
             )
     if m2m_flow:
+        m2m_flow_draw_record = set()
         for node_name1 in m2m_flow:
             if node_name1 in place_record:
                 for node_name2 in m2m_flow[node_name1]:
                     if node_name2 in place_record:
-                        ax.plot(
-                            [
-                                place_record[node_name1].center_x / placedb.max_width,
-                                place_record[node_name2].center_x / placedb.max_width,
-                            ],
-                            [
-                                place_record[node_name1].center_y / placedb.max_height,
-                                place_record[node_name2].center_y / placedb.max_height,
-                            ],
-                            color="blue",
-                            linewidth=np.log2(m2m_flow[node_name1][node_name2] + 1),
-                        )
+                        if ((node_name1, node_name2) not in m2m_flow_draw_record) and (
+                            (node_name2, node_name1) not in m2m_flow_draw_record
+                        ):
+                            ax.plot(
+                                [
+                                    place_record[node_name1].center_x
+                                    / placedb.max_width,
+                                    place_record[node_name2].center_x
+                                    / placedb.max_width,
+                                ],
+                                [
+                                    place_record[node_name1].center_y
+                                    / placedb.max_height,
+                                    place_record[node_name2].center_y
+                                    / placedb.max_height,
+                                ],
+                                color="blue",
+                                linewidth=np.log2(m2m_flow[node_name1][node_name2] + 1),
+                            )
+                            m2m_flow_draw_record.add((node_name1, node_name2))
+
+    draw_regularity(ax, placedb)
 
     # print("x_max = {}, y_max ={}".format(x_max, y_max))
     plt.xlim(0, 1)
@@ -900,7 +928,8 @@ def draw_detailed_placement(
     max_width: int,
     max_height: int,
     grid_size: int,
-    placedb: PlaceDB = None,
+    placedb: PlaceDB,
+    draw_id: bool = True,
 ):
     node_dict: Dict[str, Node] = {}
 
@@ -933,11 +962,18 @@ def draw_detailed_placement(
     ax = fig.add_axes([0, 0, 1, 1], frameon=True, aspect=1.0)
     ax.xaxis.set_visible(False)
     ax.yaxis.set_visible(False)
-    # for node_name, node in node_dict.items():
+
     node_x_list, node_y_list = [], []
     for node in node_dict.values():
         # print(node.name)
         if node.is_fixed:
+            if not (
+                node.name in placedb.port_to_delete
+                or placedb.node_info[node.name].is_port
+            ):  # macro 用绿色
+                color = "tab:green"
+            else:  # port 用蓝色
+                color = "cyan"
             ax.add_patch(
                 patches.Rectangle(
                     (
@@ -949,17 +985,17 @@ def draw_detailed_placement(
                     linewidth=0.1,
                     edgecolor="k",
                     alpha=0.9,
-                    facecolor="tab:green",
+                    facecolor=color,
                 )
             )
             cx = (node.bottom_left_x + node.width / 2) / max_width
             cy = (node.bottom_left_y + node.height / 2) / max_height
-            if not (
-                placedb is not None
-                and (  # 如果是 port 就不标 name
+            if (
+                not (  # 如果是 port 就不标 name
                     node.name in placedb.port_to_delete
                     or placedb.node_info[node.name].is_port
                 )
+                and draw_id
             ):
                 ax.annotate(
                     node.name,
@@ -975,6 +1011,9 @@ def draw_detailed_placement(
             node_x_list.append(node.bottom_left_x / max_width)
             node_y_list.append(node.bottom_left_y / max_height)
     ax.scatter(node_x_list, node_y_list, 0.15, "dodgerblue", edgecolors="none")
+
+    draw_regularity(ax, placedb)
+
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     fig.savefig(pic_file, dpi=600, bbox_inches="tight")

@@ -12,6 +12,10 @@ from draw_placement import (
     draw_macro_refine_dreamplace_mixed,
     draw_detailed_front_dreamplace_mixed,
     draw_detailed_refine_dreamplace_mixed,
+    draw_macro_front_dreamplace_macro,
+    draw_macro_refine_dreamplace_macro,
+    draw_detailed_front_dreamplace_macro,
+    draw_detailed_refine_dreamplace_macro,
 )
 from common import method_list, benchmark_list
 
@@ -29,6 +33,7 @@ def refine_macros(
         for b in benchmark_list:
             cmd = [
                 "python",
+                "-u",
                 "mixedmask.py",
                 "--seed",
                 "2027",
@@ -58,25 +63,13 @@ def detailed_placement(method_list: List[str], benchmark_list: List[str]):
 
         for b in benchmark_list:
             os.system(f"mkdir -p results/{b}")
-            # cmd = [
-            #     "python",
-            #     "dreamplace/Placer.py",
-            #     "--config",
-            #     f"test/ispd2005/{b}.json",
-            #     "--type",
-            #     "refine",
-            #     "--method",
-            #     method,
-            #     "|",
-            #     "tee",
-            #     f"results/{b}/result.log",
-            # ]
             cmd = " ".join(
                 [
-                    "python dreamplace/Placer.py",
+                    "python -u dreamplace/Placer.py",
                     f"--config test/ispd2005/{b}.json",
                     "--type refine",
                     f"--method {method}",
+                    "2>&1",
                     "|",
                     f"tee results/{b}/result.log",
                 ]
@@ -84,6 +77,24 @@ def detailed_placement(method_list: List[str], benchmark_list: List[str]):
             print(cmd)
             os.system(cmd)
         os.system(f"mv results results_detailed_refine-EA_{method}")
+
+
+def run_one_hyperparameter(alpha: float, beta: float, gamma: float):
+    print(f"alpha {alpha:.1f}, beta {beta:.1f}, gamma {gamma:.1f}")
+    refine_macros(method_list, benchmark_list, alpha, beta, gamma)
+    detailed_placement(method_list, benchmark_list)
+    for b in benchmark_list:
+        if "bbo" in method_list:
+            draw_macro_refine_bbo(b)
+            draw_detailed_refine_bbo(b)
+
+        if "dreamplace-mixed" in method_list:
+            draw_macro_refine_dreamplace_mixed(b)
+            draw_detailed_refine_dreamplace_mixed(b)
+
+        if "dreamplace-macro" in method_list:
+            draw_macro_refine_dreamplace_macro(b)
+            draw_detailed_refine_dreamplace_macro(b)
 
 
 if __name__ == "__main__":
@@ -121,3 +132,7 @@ if __name__ == "__main__":
         if "dreamplace-mixed" in method_list:
             draw_macro_refine_dreamplace_mixed(b)
             draw_detailed_refine_dreamplace_mixed(b)
+
+        if "dreamplace-macro" in method_list:
+            draw_macro_refine_dreamplace_macro(b)
+            draw_detailed_refine_dreamplace_macro(b)

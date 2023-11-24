@@ -1,27 +1,9 @@
 import os
-
 from common import grid_setting, benchmark_list
-from place_db import PlaceDB, Net, Pin
-from utils import PlaceRecord, Record, draw_macro_placement, get_m2m_flow
+from place_db import PlaceDB, Pin, Net
+from utils import draw_macro_placement, get_m2m_flow
+from draw_placement import db2record
 from typing import Dict
-
-
-def db2record(placedb: PlaceDB, grid_size: int) -> PlaceRecord:
-    place_record: PlaceRecord = {}
-    for node_name in placedb.node_info:
-        chosen_loc_x = placedb.node_info[node_name].bottom_left_x // grid_size
-        chosen_loc_y = placedb.node_info[node_name].bottom_left_y // grid_size
-        place_record[node_name] = Record(
-            node_name,
-            placedb.node_info[node_name].width,
-            placedb.node_info[node_name].height,
-            chosen_loc_x,
-            chosen_loc_y,
-            placedb.node_info[node_name].bottom_left_x,
-            placedb.node_info[node_name].bottom_left_y,
-            grid_size,
-        )
-    return place_record
 
 
 def write_nodes_cell(
@@ -60,9 +42,7 @@ def write_pl_cell(src_file: str, dst_file: str):
     with open(src_file, "r", encoding="utf8") as fread:
         for line in fread:
             line = line.strip()
-            if (line.startswith("o") or line.startswith("p")) and not line.endswith(
-                "/FIXED"
-            ):
+            if line.startswith("o") and not line.endswith("/FIXED"):
                 line = line.split()
                 node_name, bottom_left_x, bottom_left_y = (
                     line[0],
@@ -130,7 +110,6 @@ NumNets : {num_nets}
 NumPins : {num_pins}
 """
         )
-        fwrite.write("\n")
         for net_name in net_info:
             net_pin_num = sum(
                 [len(net_info[net_name][node_name]) for node_name in net_info[net_name]]
@@ -143,63 +122,18 @@ NumPins : {num_pins}
                     )
 
 
-def mixedsize_preprocessing(benchmark: str):
+def for_human_preprocessing(benchmark: str):
     print(benchmark)
     grid_size = grid_setting[benchmark]["grid_size"]
     placedb = PlaceDB(benchmark, grid_size)
 
     origin_benchmark_dir = os.path.join("benchmarks", benchmark)
-    benchmarks_mixedsize_dir = os.path.join("benchmarks_mixedsize", benchmark)
-    os.system(f"mkdir -p {benchmarks_mixedsize_dir}")
+    benchmarks_for_human_dir = os.path.join("benchmarks_for_human", benchmark)
+    os.system(f"mkdir -p {benchmarks_for_human_dir}")
     # 处理 .nodes, .nets, .pl 文件
-    nodes_file = os.path.join(benchmarks_mixedsize_dir, f"{benchmark}.nodes")
-    pl_file = os.path.join(benchmarks_mixedsize_dir, f"{benchmark}.pl")
-    nets_file = os.path.join(benchmarks_mixedsize_dir, f"{benchmark}.nets")
-    write_nodes_cell(
-        os.path.join(origin_benchmark_dir, f"{benchmark}.nodes"),
-        nodes_file,
-        placedb,
-        False,
-    )
-    write_pl_cell(os.path.join(origin_benchmark_dir, f"{benchmark}.pl"), pl_file)
-    placedb.write_nodes_pure(nodes_file)
-    placedb.write_pl_pure(pl_file)
-    write_nets_cell(
-        os.path.join(origin_benchmark_dir, f"{benchmark}.nets"), nets_file, placedb
-    )
-
-    # 处理 .aux, .scl, .wts 文件
-    origin_benchmark_dir = os.path.join("benchmarks", benchmark)
-    os.system(
-        f"cp -f {origin_benchmark_dir}/{benchmark}.aux {benchmarks_mixedsize_dir}"
-    )
-    os.system(
-        f"cp -f {origin_benchmark_dir}/{benchmark}.scl {benchmarks_mixedsize_dir}"
-    )
-    os.system(
-        f"cp -f {origin_benchmark_dir}/{benchmark}.wts {benchmarks_mixedsize_dir}"
-    )
-
-    # 生成布局对应的图片
-    m2m_csv_file = os.path.join("benchmarks", benchmark, "macro2macro.csv")
-    m2m_flow = get_m2m_flow(m2m_csv_file)
-    pic_file = os.path.join(benchmarks_mixedsize_dir, f"{benchmark}.png")
-    place_record = db2record(placedb, grid_size)
-    draw_macro_placement(place_record, pic_file, placedb, m2m_flow)
-
-
-def to_detailed_preprocessing(benchmark: str):
-    print(benchmark)
-    grid_size = grid_setting[benchmark]["grid_size"]
-    placedb = PlaceDB(benchmark, grid_size)
-
-    origin_benchmark_dir = os.path.join("benchmarks", benchmark)
-    benchmarks_to_detailed_dir = os.path.join("benchmarks_to_detailed", benchmark)
-    os.system(f"mkdir -p {benchmarks_to_detailed_dir}")
-    # 处理 .nodes, .nets, .pl 文件
-    nodes_file = os.path.join(benchmarks_to_detailed_dir, f"{benchmark}.nodes")
-    pl_file = os.path.join(benchmarks_to_detailed_dir, f"{benchmark}.pl")
-    nets_file = os.path.join(benchmarks_to_detailed_dir, f"{benchmark}.nets")
+    nodes_file = os.path.join(benchmarks_for_human_dir, f"{benchmark}.nodes")
+    pl_file = os.path.join(benchmarks_for_human_dir, f"{benchmark}.pl")
+    nets_file = os.path.join(benchmarks_for_human_dir, f"{benchmark}.nets")
     write_nodes_cell(
         os.path.join(origin_benchmark_dir, f"{benchmark}.nodes"),
         nodes_file,
@@ -207,8 +141,8 @@ def to_detailed_preprocessing(benchmark: str):
         True,
     )
     write_pl_cell(os.path.join(origin_benchmark_dir, f"{benchmark}.pl"), pl_file)
-    placedb.write_nodes_pure_fixed(nodes_file)
-    placedb.write_pl_pure_fixed(pl_file)
+    placedb.write_nodes_pure_pam(nodes_file)
+    placedb.write_pl_pure_pam(pl_file)
     write_nets_cell(
         os.path.join(origin_benchmark_dir, f"{benchmark}.nets"), nets_file, placedb
     )
@@ -216,43 +150,34 @@ def to_detailed_preprocessing(benchmark: str):
     # 处理 .aux, .scl, .wts 文件
     origin_benchmark_dir = os.path.join("benchmarks", benchmark)
     os.system(
-        f"cp -f {origin_benchmark_dir}/{benchmark}.aux {benchmarks_to_detailed_dir}"
+        f"cp -f {origin_benchmark_dir}/{benchmark}.aux {benchmarks_for_human_dir}"
     )
     os.system(
-        f"cp -f {origin_benchmark_dir}/{benchmark}.scl {benchmarks_to_detailed_dir}"
+        f"cp -f {origin_benchmark_dir}/{benchmark}.scl {benchmarks_for_human_dir}"
     )
     os.system(
-        f"cp -f {origin_benchmark_dir}/{benchmark}.wts {benchmarks_to_detailed_dir}"
+        f"cp -f {origin_benchmark_dir}/{benchmark}.wts {benchmarks_for_human_dir}"
     )
 
     # 生成布局对应的图片
     m2m_csv_file = os.path.join("benchmarks", benchmark, "macro2macro.csv")
     m2m_flow = get_m2m_flow(m2m_csv_file)
-    pic_file = os.path.join(benchmarks_to_detailed_dir, f"{benchmark}.png")
     place_record = db2record(placedb, grid_size)
-    draw_macro_placement(place_record, pic_file, placedb, m2m_flow)
+    pic_file = os.path.join(benchmarks_for_human_dir, f"{benchmark}_dataflow_id.png")
+    draw_macro_placement(place_record, pic_file, placedb, m2m_flow, True)
 
+    pic_file = os.path.join(benchmarks_for_human_dir, f"{benchmark}_nodataflow_id.png")
+    draw_macro_placement(place_record, pic_file, placedb, None, True)
 
-def macro_preprocessing(benchmark: str):
-    print(benchmark)
-    grid_size = grid_setting[benchmark]["grid_size"]
-    placedb = PlaceDB(benchmark, grid_size)
+    pic_file = os.path.join(benchmarks_for_human_dir, f"{benchmark}_dataflow_noid.png")
+    draw_macro_placement(place_record, pic_file, placedb, m2m_flow, False)
 
-    benchmarks_macro_dir = os.path.join("benchmarks_macro", benchmark)
-    os.system(f"mkdir -p {benchmarks_macro_dir}")
-    # 处理 .nodes, .nets, .pl 文件
-    placedb.write_nodes(os.path.join(benchmarks_macro_dir, f"{benchmark}.nodes"))
-    placedb.write_pl(os.path.join(benchmarks_macro_dir, f"{benchmark}.pl"))
-    placedb.write_nets(os.path.join(benchmarks_macro_dir, f"{benchmark}.nets"))
-    # 处理 .aux, .scl, .wts 文件
-    origin_benchmark_dir = os.path.join("benchmarks", benchmark)
-    os.system(f"cp -f {origin_benchmark_dir}/{benchmark}.aux {benchmarks_macro_dir}")
-    os.system(f"cp -f {origin_benchmark_dir}/{benchmark}.scl {benchmarks_macro_dir}")
-    os.system(f"cp -f {origin_benchmark_dir}/{benchmark}.wts {benchmarks_macro_dir}")
+    pic_file = os.path.join(
+        benchmarks_for_human_dir, f"{benchmark}_nodataflow_noid.png"
+    )
+    draw_macro_placement(place_record, pic_file, placedb, None, False)
 
 
 if __name__ == "__main__":
     for b in benchmark_list:
-        to_detailed_preprocessing(b)
-        mixedsize_preprocessing(b)
-        macro_preprocessing(b)
+        for_human_preprocessing(b)

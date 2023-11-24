@@ -5,62 +5,7 @@ import pandas as pd
 from typing import List, Tuple, Dict
 from extract_results import extract_all
 from common import my_inf, method_list, benchmark_list
-
-
-class Result:
-    def __init__(self, hpwl: float, congestion: float) -> None:
-        self._hpwl = hpwl
-        self._congestion = congestion
-
-    @property
-    def hpwl(self) -> float:
-        return self._hpwl
-
-    @property
-    def congestion(self) -> float:
-        return self._congestion
-
-
-ResultsRecord = Dict[str, Dict[str, Result]]
-
-
-def extract_one_log(file_name: str) -> Tuple[float, float]:
-    hpwl = 0
-    overflow = 0
-    with open(file_name, "r", encoding="utf8") as f:
-        lines = f.readlines()
-        lines.reverse()
-        for line in lines:
-            if "wHPWL" in line and "Overflow" in line and "MaxDensity" in line:
-                line = line.split(",")
-                for piece in line:
-                    if "wHPWL" in piece:
-                        hpwl = float(piece.split()[-1])
-                    elif "Overflow" in piece:
-                        overflow = float(piece.split()[-1])
-                break
-    return hpwl, overflow
-
-
-def get_all_baselines(
-    method_list: List[str], benchmark_list: List[str]
-) -> ResultsRecord:
-    if os.path.exists("baseline_results.pk"):
-        with open("baseline_results.pk", "rb") as f:
-            baseline_records = pk.load(f)
-    else:
-        baseline_records = {}
-        for method in method_list:
-            baseline_records[method] = {}
-            dirname = f"results_detailed_front_{method}"
-            for benchmark in benchmark_list:
-                file_name = os.path.join(dirname, benchmark, "result.log")
-                hpwl, overflow = extract_one_log(file_name)
-                print(f"{method} {benchmark} hpwl {hpwl:e} overflow {overflow:e}")
-                baseline_records[method][benchmark] = Result(hpwl, overflow)
-        with open("baseline_results.pk", "wb") as f:
-            pk.dump(baseline_records, f)
-    return baseline_records
+from auto_run import run_one_hyperparameter
 
 
 SearchRecord = Dict[str, Dict[str, np.ndarray]]
@@ -91,20 +36,15 @@ def run_all_cases(
             beta = j / 10
             gamma = k / 10
             pivot = str(i) + str(j) + str(k)
-            dirname = f"results_v7_grid_search_{pivot}"
+            dirname = f"results_v11_grid_search_{pivot}"
             if not os.path.exists(dirname):
-                cmd = (
-                    f"python auto_run.py --alpha {alpha} --beta {beta} --gamma {gamma}"
-                )
-                print(cmd)
-                os.system(cmd)
+                run_one_hyperparameter(alpha, beta, gamma)
 
                 os.system(f"mkdir {dirname}")
                 os.system(f"cp -r results_detailed_* {dirname}")
                 os.system(f"cp -r results_macro_* {dirname}")
                 os.system("rm -rf results_*_refine*")
-                os.system(f"mv results_hpwl.csv {dirname}")
-                os.system(f"mv results_congestion.csv {dirname}")
+
             # else:
             #     with open(f"search_results/search_record_hpwl_{pivot}.pk", "rb") as f:
             #         search_record_hpwl = pk.load(f)
@@ -114,6 +54,9 @@ def run_all_cases(
             #         search_record_congestion = pk.load(f)
 
             df_hpwl, df_congestion = extract_all(method_list, benchmark_list, dirname)
+            os.system(f"mv results_hpwl.csv {dirname}")
+            os.system(f"mv results_congestion.csv {dirname}")
+
             idx = (i, j)
             for method in method_list:
                 for b in benchmark_list:

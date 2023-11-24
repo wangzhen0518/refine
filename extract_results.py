@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 from typing import List, Tuple
+from common import method_list, benchmark_list
 
 
 def extract_one_log(file_name: str) -> Tuple[float, float]:
@@ -46,15 +47,4 @@ def extract_all(method_list: List[str], benchmark_list: List[str], dirbase: str 
 
 
 if __name__ == "__main__":
-    method_list = ["bbo", "dreamplace-mixed"]
-    benchmark_list = [
-        "adaptec1",
-        "adaptec2",
-        "adaptec3",
-        "adaptec4",
-        "bigblue1",
-        "bigblue3",
-        "bigblue4",
-    ]
-
     df_hpwl, df_congestion = extract_all(method_list, benchmark_list)

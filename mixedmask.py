@@ -27,6 +27,8 @@ from utils import (
 )
 
 rank_alpha, rank_beta = 0.8, 0.2
+refine_center_scaled_factor = 0.8
+refine_virtual_boundary_scaled_factor = 1.2
 
 
 def set_seed(seed: int):
@@ -104,12 +106,23 @@ class Disturbance:
         # )
         self.priority /= np.sum(self.priority)
         self.action_record = None
+        self.clist = [
+            ("o451498", "o450953"),
+            ("o451577", "o451436"),
+            ("o451577", "o451581"),
+            ("o451492", "o451589"),
+            ("o451436", "o450963"),
+            ("o451429", "o451642"),
+        ]
+        self.i = 0
 
     def disturbance(self, place_record: PlaceRecord, grid_size: int):
         place_record_new = copy.deepcopy(place_record)
         node_name1, node_name2 = np.random.choice(
             self.candidates, 2, replace=False, p=self.priority
         )
+        # node_name1, node_name2 = self.clist[self.i]
+        # self.i += 1
         print(node_name1, node_name2)
         swap(place_record_new[node_name1], place_record_new[node_name2], grid_size)
         self.action_record = (node_name1, node_name2)
@@ -259,12 +272,31 @@ def refine_EA(
     write_final_placement(place_record, my_inf, placement_file)
     # draw_macros(placedb, placement_file, grid_size, m2m_flow, pic_file)
 
+    # print("init")  # 用于 evaluator 收敛
+    # for i in range(5):
+    #     print(i)
+    #     place_record_new, _, _ = disturbancer.disturbance(place_record, grid_size)
+    #     place_record_new, is_legal = mixed_placer(
+    #         node_id_ls,
+    #         placedb,
+    #         grid_num,
+    #         grid_size,
+    #         place_record_new,
+    #         m2m_flow,
+    #         mask_alpha,
+    #         mask_beta,
+    #         mask_gamma,
+    #     )
+    #     if is_legal:
+    #         evaluator.evaluate(place_record_new, placedb, m2m_flow).show()
+
     # EA 迭代
+    print("\nEA")
     best_placed_record, best_eval = place_record, eval_record
     for i in range(iter_rounds):
         print(i)
         place_record_new, node_name1, node_name2 = disturbancer.disturbance(
-            place_record, grid_size
+            best_placed_record, grid_size
         )
         node_id_ls_new = node_id_ls.copy()
         node_id_ls_new.remove(node_name1)
@@ -297,7 +329,7 @@ def refine_EA(
             curve_fp.flush()
         if is_legal and eval_record < best_eval:
             best_eval = eval_record
-            best_placed_record = place_record = place_record_new
+            best_placed_record = place_record_new
             write_final_placement(best_placed_record, best_eval.hpwl, placement_file)
             # draw_macros(placedb, placement_file, grid_size, m2m_flow, pic_file)
         else:
@@ -342,21 +374,26 @@ def main():
     grid_size = grid_setting[benchmark]["grid_size"]
 
     placedb = PlaceDB(benchmark, grid_size)
-    placedb.deal_center_core(scale_factor=1.2)
-    placedb.deal_virtual_boundary(scale_factor=0.8)
+    placedb.deal_center_core(scale_factor=refine_center_scaled_factor)
+    placedb.deal_virtual_boundary(scale_factor=refine_virtual_boundary_scaled_factor)
     print("#port", placedb.port_cnt)
     print("#macro", len(placedb.macro_name))
 
     if front == "bbo":
         init_macro_pl_file = os.path.join(
-            "results_macro_front_bbo", benchmark, f"{benchmark}.gp.pl"
+            "results_macro_front_bbo_ori", benchmark, f"{benchmark}.gp.pl"
         )
         result_dir = os.path.join("results_macro_refine-EA_bbo", benchmark)
     elif front == "dreamplace-mixed":
         init_macro_pl_file = os.path.join(
-            "results_detailed_front_dreamplace-mixed", benchmark, f"{benchmark}.gp.pl"
+            "results_macro_front_dreamplace-mixed", benchmark, f"{benchmark}.gp.pl"
         )
         result_dir = os.path.join("results_macro_refine-EA_dreamplace-mixed", benchmark)
+    elif front == "dreamplace-macro":
+        init_macro_pl_file = os.path.join(
+            "results_macro_front_dreamplace-macro", benchmark, f"{benchmark}.gp.pl"
+        )
+        result_dir = os.path.join("results_macro_refine-EA_dreamplace-macro", benchmark)
     else:
         raise NotImplementedError
 
@@ -370,6 +407,7 @@ def main():
     placement_file = os.path.join(result_dir, "placement.csv")
     pl_file = os.path.join(result_dir, f"{benchmark}.gp.pl")
 
+    start = time.time()
     best_placed_macro, _ = refine_EA(
         iter_rounds,
         placedb,
@@ -386,6 +424,8 @@ def main():
         mask_beta,
         mask_gamma,
     )
+    end = time.time()
+    print(f"time: {end - start}s")
     write_pl_for_detailed(best_placed_macro, pl_file)
 
     pic_file = os.path.join(result_dir, f"{benchmark}.png")

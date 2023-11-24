@@ -110,9 +110,12 @@ def main():
     # pl_file_for_detailed = os.path.join(result_dir, f"{benchmark}_for_detailed.gp.pl")
     pl_file_for_refine = os.path.join(result_dir, f"{benchmark}.gp.pl")
 
+    start = time.time()
     place_record, hpwl = bbo(
         init_round, stop_round, placedb, grid_num, grid_size, curve_file, placement_file
     )
+    end = time.time()
+    print(f"time: {end-start}s")
     if place_record:
         pic_file = os.path.join(result_dir, f"{benchmark}.png")
         draw_macros(placedb, placement_file, grid_size, None, pic_file)

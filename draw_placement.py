@@ -1,8 +1,10 @@
 import os
+import numpy as np
+import matplotlib.pyplot as plt
 
 from scipy.spatial import distance
 
-from common import grid_setting
+from common import grid_setting, benchmark_list
 from place_db import PlaceDB
 from utils import (
     M2MFlow,
@@ -13,6 +15,9 @@ from utils import (
     get_m2m_flow,
     read_placement,
 )
+
+refine_center_scaled_factor = 0.8
+refine_virtual_boundary_scaled_factor = 1.2
 
 
 def cal_dataflow(placedb: PlaceDB, place_record: PlaceRecord, m2m_flow: M2MFlow):
@@ -38,8 +43,8 @@ def cal_dataflow(placedb: PlaceDB, place_record: PlaceRecord, m2m_flow: M2MFlow)
 def db2record(placedb: PlaceDB, grid_size: int) -> PlaceRecord:
     place_record: PlaceRecord = {}
     for node_name in placedb.node_info:
-        chosen_loc_x = int(placedb.node_info[node_name].bottom_left_x / grid_size)
-        chosen_loc_y = int(placedb.node_info[node_name].bottom_left_y / grid_size)
+        chosen_loc_x = placedb.node_info[node_name].bottom_left_x // grid_size
+        chosen_loc_y = placedb.node_info[node_name].bottom_left_y // grid_size
         place_record[node_name] = Record(
             node_name,
             placedb.node_info[node_name].width,
@@ -130,14 +135,59 @@ def draw_origin(benchmark: str):
     print(f"draw_origin {benchmark}")
     grid_size = grid_setting[benchmark]["grid_size"]
     placedb = PlaceDB(benchmark, grid_size)
-    m2m_file = "benchmarks/{}/macro2macro.csv".format(benchmark)
-    m2m_flow = get_m2m_flow(m2m_file)
+    # m2m_file = "benchmarks/{}/macro2macro.csv".format(benchmark)
+    # m2m_flow = get_m2m_flow(m2m_file)
+    m2m_flow = None
 
-    pl_file = os.path.join("mixedsize_benchmarks", benchmark, f"{benchmark}.pl")
-    pic_file = os.path.join("benchmarks", benchmark, f"{benchmark}_id_noportid.png")
-    read_pl_file(placedb, pl_file)
+    # pl_file = os.path.join("benchmarks", benchmark, f"{benchmark}.pl")
+    pic_file = os.path.join("benchmarks", benchmark, f"{benchmark}.png")
+    # read_pl_file(placedb, pl_file)
     origin_record = db2record(placedb, grid_size)
     draw_macro_placement(origin_record, pic_file, placedb, m2m_flow)
+
+
+def draw_macro_front_dreamplace_mixed(benchmark):
+    print(f"draw_macro_front_dreamplace_mixed {benchmark}")
+    grid_size = grid_setting[benchmark]["grid_size"]
+    placedb = PlaceDB(benchmark, grid_size)
+    m2m_file = "benchmarks/{}/macro2macro.csv".format(benchmark)
+    m2m_flow = get_m2m_flow(m2m_file)
+    pl_file = os.path.join(
+        "results_macro_front_dreamplace-mixed", benchmark, f"{benchmark}.gp.pl"
+    )
+    read_pl_file(placedb, pl_file)
+    front_bbo_record = db2record(placedb, grid_size)
+    pic_file = os.path.join(
+        "results_macro_front_dreamplace-mixed",
+        benchmark,
+        f"{benchmark}_macro.png",
+    )
+    draw_macro_placement(front_bbo_record, pic_file, placedb, m2m_flow)
+
+
+def draw_macro_refine_dreamplace_mixed(benchmark):
+    print(f"draw_macro_refine_dreamplace_mixed {benchmark}")
+    grid_size = grid_setting[benchmark]["grid_size"]
+    placedb = PlaceDB(benchmark, grid_size)
+    placedb.deal_center_core(scale_factor=refine_center_scaled_factor)
+    placedb.deal_virtual_boundary(scale_factor=refine_virtual_boundary_scaled_factor)
+    m2m_file = "benchmarks/{}/macro2macro.csv".format(benchmark)
+    m2m_flow = get_m2m_flow(m2m_file)
+    pl_file = os.path.join(
+        # "results_v8_grid_search_820",
+        "results_macro_refine-EA_dreamplace-mixed",
+        benchmark,
+        f"{benchmark}.gp.pl",
+    )
+    read_pl_file(placedb, pl_file)
+    front_bbo_record = db2record(placedb, grid_size)
+    pic_file = os.path.join(
+        # "results_v8_grid_search_820",
+        "results_macro_refine-EA_dreamplace-mixed",
+        benchmark,
+        f"{benchmark}_macro.png",
+    )
+    draw_macro_placement(front_bbo_record, pic_file, placedb, m2m_flow)
 
 
 def draw_detailed_front_dreamplace_mixed(benchmark):
@@ -166,12 +216,20 @@ def draw_detailed_refine_dreamplace_mixed(benchmark):
     print(f"draw_detailed_refine_dreamplace-mixed {benchmark}")
     grid_size = grid_setting[benchmark]["grid_size"]
     placedb = PlaceDB(benchmark, grid_size)
+    placedb.deal_center_core(scale_factor=refine_center_scaled_factor)
+    placedb.deal_virtual_boundary(scale_factor=refine_virtual_boundary_scaled_factor)
     node_file = f"benchmarks/{benchmark}/{benchmark}.nodes"
     pl_file = os.path.join(
-        "results_detailed_refine-EA_dreamplace-mixed", benchmark, f"{benchmark}.gp.pl"
+        # "results_v8_grid_search_820",
+        "results_detailed_refine-EA_dreamplace-mixed",
+        # "results",
+        benchmark,
+        f"{benchmark}.gp.pl",
     )
     pic_file = os.path.join(
+        # "results_v8_grid_search_820",
         "results_detailed_refine-EA_dreamplace-mixed",
+        # "results",
         benchmark,
         f"{benchmark}.png",
     )
@@ -188,42 +246,6 @@ def draw_detailed_refine_dreamplace_mixed(benchmark):
     )
 
 
-def draw_macro_front_dreamplace_mixed(benchmark):
-    print(f"draw_macro_front_dreamplace_mixed {benchmark}")
-    grid_size = grid_setting[benchmark]["grid_size"]
-    placedb = PlaceDB(benchmark, grid_size)
-    m2m_file = "benchmarks/{}/macro2macro.csv".format(benchmark)
-    m2m_flow = get_m2m_flow(m2m_file)
-    pl_file = os.path.join(
-        "results_detailed_front_dreamplace-mixed", benchmark, f"{benchmark}.gp.pl"
-    )
-    read_pl_file(placedb, pl_file)
-    front_bbo_record = db2record(placedb, grid_size)
-    pic_file = os.path.join(
-        "results_detailed_front_dreamplace-mixed",
-        benchmark,
-        f"{benchmark}_macro.png",
-    )
-    draw_macro_placement(front_bbo_record, pic_file, placedb, m2m_flow)
-
-
-def draw_macro_refine_dreamplace_mixed(benchmark):
-    print(f"draw_macro_refine_dreamplace_mixed {benchmark}")
-    grid_size = grid_setting[benchmark]["grid_size"]
-    placedb = PlaceDB(benchmark, grid_size)
-    m2m_file = "benchmarks/{}/macro2macro.csv".format(benchmark)
-    m2m_flow = get_m2m_flow(m2m_file)
-    pl_file = os.path.join(
-        "results_macro_refine-EA_dreamplace-mixed", benchmark, f"{benchmark}.gp.pl"
-    )
-    read_pl_file(placedb, pl_file)
-    front_bbo_record = db2record(placedb, grid_size)
-    pic_file = os.path.join(
-        "results_macro_refine-EA_dreamplace-mixed", benchmark, f"{benchmark}.png"
-    )
-    draw_macro_placement(front_bbo_record, pic_file, placedb, m2m_flow)
-
-
 def draw_macro_front_bbo(benchmark):
     print(f"draw_macro_front_bbo {benchmark}")
     grid_size = grid_setting[benchmark]["grid_size"]
@@ -233,7 +255,9 @@ def draw_macro_front_bbo(benchmark):
     pl_file = os.path.join("results_macro_front_bbo", benchmark, f"{benchmark}.gp.pl")
     read_pl_file(placedb, pl_file)
     front_bbo_record = db2record(placedb, grid_size)
-    pic_file = os.path.join("results_macro_front_bbo", benchmark, f"{benchmark}.png")
+    pic_file = os.path.join(
+        "results_macro_front_bbo", benchmark, f"{benchmark}_macro.png"
+    )
     draw_macro_placement(front_bbo_record, pic_file, placedb, m2m_flow)
 
 
@@ -241,6 +265,8 @@ def draw_macro_refine_bbo(benchmark):
     print(f"draw_macro_refine_bbo {benchmark}")
     grid_size = grid_setting[benchmark]["grid_size"]
     placedb = PlaceDB(benchmark, grid_size)
+    placedb.deal_center_core(scale_factor=refine_center_scaled_factor)
+    placedb.deal_virtual_boundary(scale_factor=refine_virtual_boundary_scaled_factor)
     m2m_file = "benchmarks/{}/macro2macro.csv".format(benchmark)
     m2m_flow = get_m2m_flow(m2m_file)
     pl_file = os.path.join(
@@ -249,7 +275,7 @@ def draw_macro_refine_bbo(benchmark):
     read_pl_file(placedb, pl_file)
     front_bbo_record = db2record(placedb, grid_size)
     pic_file = os.path.join(
-        "results_macro_refine-EA_bbo", benchmark, f"{benchmark}.png"
+        "results_macro_refine-EA_bbo", benchmark, f"{benchmark}_macro.png"
     )
     draw_macro_placement(front_bbo_record, pic_file, placedb, m2m_flow)
 
@@ -281,8 +307,8 @@ def draw_detailed_refine_bbo(benchmark):
     grid_size = grid_setting[benchmark]["grid_size"]
     placedb = PlaceDB(benchmark, grid_size)
     node_file = f"benchmarks/{benchmark}/{benchmark}.nodes"
-    # pl_file = os.path.join("refine_dreamplace_detailed_results", benchmark, f"{benchmark}.gp.pl")
-    # pic_file = os.path.join("refine_dreamplace_detailed_results", benchmark, f"{benchmark}_id_noportid.png")
+    placedb.deal_center_core(scale_factor=refine_center_scaled_factor)
+    placedb.deal_virtual_boundary(scale_factor=refine_virtual_boundary_scaled_factor)
     pl_file = os.path.join(
         "results_detailed_refine-EA_bbo", benchmark, f"{benchmark}.gp.pl"
     )
@@ -300,6 +326,137 @@ def draw_detailed_refine_bbo(benchmark):
     )
 
 
+def draw_macro_front_dreamplace_macro(benchmark):
+    print(f"draw_macro_front_dreamplace_macro {benchmark}")
+    grid_size = grid_setting[benchmark]["grid_size"]
+    placedb = PlaceDB(benchmark, grid_size)
+    m2m_file = "benchmarks/{}/macro2macro.csv".format(benchmark)
+    m2m_flow = get_m2m_flow(m2m_file)
+    pl_file = os.path.join(
+        "results_macro_front_dreamplace-macro", benchmark, f"{benchmark}.gp.pl"
+    )
+    read_pl_file(placedb, pl_file)
+    front_bbo_record = db2record(placedb, grid_size)
+    pic_file = os.path.join(
+        "results_macro_front_dreamplace-macro",
+        benchmark,
+        f"{benchmark}_macro.png",
+    )
+    draw_macro_placement(front_bbo_record, pic_file, placedb, m2m_flow)
+
+
+def draw_macro_refine_dreamplace_macro(benchmark):
+    print(f"draw_macro_refine_dreamplace_macro {benchmark}")
+    grid_size = grid_setting[benchmark]["grid_size"]
+    placedb = PlaceDB(benchmark, grid_size)
+    placedb.deal_center_core(scale_factor=refine_center_scaled_factor)
+    placedb.deal_virtual_boundary(scale_factor=refine_virtual_boundary_scaled_factor)
+    m2m_file = "benchmarks/{}/macro2macro.csv".format(benchmark)
+    m2m_flow = get_m2m_flow(m2m_file)
+    pl_file = os.path.join(
+        # "results_v8_grid_search_820",
+        "results_macro_refine-EA_dreamplace-macro",
+        benchmark,
+        f"{benchmark}.gp.pl",
+    )
+    read_pl_file(placedb, pl_file)
+    front_bbo_record = db2record(placedb, grid_size)
+    pic_file = os.path.join(
+        # "results_v8_grid_search_820",
+        "results_macro_refine-EA_dreamplace-macro",
+        benchmark,
+        f"{benchmark}_macro.png",
+    )
+    draw_macro_placement(front_bbo_record, pic_file, placedb, m2m_flow)
+
+
+def draw_detailed_front_dreamplace_macro(benchmark):
+    print(f"draw_detailed_front_dreamplace_macro {benchmark}")
+    grid_size = grid_setting[benchmark]["grid_size"]
+    placedb = PlaceDB(benchmark, grid_size)
+    node_file = f"benchmarks/{benchmark}/{benchmark}.nodes"
+    pl_file = os.path.join(
+        "results_detailed_front_dreamplace-macro", benchmark, f"{benchmark}.gp.pl"
+    )
+    pic_file = os.path.join(
+        "results_detailed_front_dreamplace-macro", benchmark, f"{benchmark}.png"
+    )
+    draw_detailed_placement(
+        node_file,
+        pl_file,
+        pic_file,
+        placedb.max_width,
+        placedb.max_height,
+        grid_size,
+        placedb,
+    )
+
+
+def draw_detailed_refine_dreamplace_macro(benchmark):
+    print(f"draw_detailed_refine_dreamplace-macro {benchmark}")
+    grid_size = grid_setting[benchmark]["grid_size"]
+    placedb = PlaceDB(benchmark, grid_size)
+    placedb.deal_center_core(scale_factor=refine_center_scaled_factor)
+    placedb.deal_virtual_boundary(scale_factor=refine_virtual_boundary_scaled_factor)
+    node_file = f"benchmarks/{benchmark}/{benchmark}.nodes"
+    pl_file = os.path.join(
+        # "results_v8_grid_search_820",
+        "results_detailed_refine-EA_dreamplace-macro",
+        # "results",
+        benchmark,
+        f"{benchmark}.gp.pl",
+    )
+    pic_file = os.path.join(
+        # "results_v8_grid_search_820",
+        "results_detailed_refine-EA_dreamplace-macro",
+        # "results",
+        benchmark,
+        f"{benchmark}.png",
+    )
+    # pl_file = os.path.join("results", benchmark, f"{benchmark}.gp.pl")
+    # pic_file = os.path.join("results", benchmark, f"{benchmark}_id_noportid.png")
+    draw_detailed_placement(
+        node_file,
+        pl_file,
+        pic_file,
+        placedb.max_width,
+        placedb.max_height,
+        grid_size,
+        placedb,
+    )
+
+
+def draw_area_dataflow(benchmark):
+    grid_size = grid_setting[benchmark]["grid_size"]
+    m2m_file = "benchmarks/{}/macro2macro.csv".format(benchmark)
+    m2m_flow = get_m2m_flow(m2m_file)
+    placedb = PlaceDB(benchmark, grid_size)
+    cnt = len(placedb.macro_name)
+    macro_list = sorted(placedb.macro_name)
+    area_list = np.array([placedb.node_info[ni].area for ni in macro_list])
+    df_list = np.array([sum(m2m_flow[ni].values()) for ni in macro_list])
+    # idx_list = np.argsort(-area_list)  # 按面积降序排序
+    idx_list = np.argsort(area_list)  # 按面积升序排序
+    area_list = np.array([np.log(area_list[i]) for i in idx_list])  #! 其他实现方式？
+    df_list = np.array([df_list[i] for i in idx_list])  #! 其他实现方式？
+
+    # fig, ax = plt.subplots()
+    # ax.plot(range(cnt), area_list, c="orange", label="area")
+    # ax.legend()
+    # ax2 = ax.twinx()
+    # ax2.plot(range(cnt), df_list, c="blue", label="dataflow")
+    # ax2.legend()
+    # fig.savefig(f"{benchmark}_area_dataflow.png")
+    # plt.close(fig)
+
+    fig, ax = plt.subplots()
+    ax.plot(area_list, df_list)
+    ax.set_xlabel("area")
+    ax.set_ylabel("dataflow")
+    fig.savefig(f"{benchmark}_area_dataflow.png")
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     # assert len(sys.argv) >= 2
     # benchmark = sys.argv[1]
@@ -310,30 +467,51 @@ if __name__ == "__main__":
     # draw_wiremask(benchmark)
     # draw_mixedmask(benchmark)
 
+    # blist = [
+    #     "adaptec1",
+    #     "adaptec2",
+    #     "adaptec3",
+    #     "adaptec4",
+    #     "bigblue1",
+    #     "bigblue3",
+    #     # "bigblue4",
+    # ]
     blist = [
-        "adaptec1",
-        "adaptec2",
-        "adaptec3",
-        "adaptec4",
-        "bigblue1",
-        "bigblue3",
-        "bigblue4",
+        "superblue2",
+        "superblue3",
+        "superblue6",
+        "superblue7",
+        "superblue9",
+        "superblue11",
+        "superblue12",
+        "superblue14",
+        "superblue16",
+        "superblue18",
+        "superblue19",
     ]
-    for b in blist:
-        draw_detailed_front_dreamplace_mixed(b)
-        draw_macro_front_dreamplace_mixed(b)
+    # for b in benchmark_list:
+    #     # draw_origin(b)
+    #     # draw_macro_front_dreamplace_macro(b)
+    #     # draw_detailed_front_dreamplace_macro(b)
+    #     #     draw_detailed_front_dreamplace_mixed(b)
+    #     #     draw_macro_front_dreamplace_mixed(b)
 
-        draw_macro_refine_dreamplace_mixed(b)
-        draw_detailed_refine_dreamplace_mixed(b)
+    #     # draw_macro_refine_dreamplace_mixed(b)
+    #     # draw_detailed_refine_dreamplace_mixed(b)
 
-        draw_macro_front_bbo(b)
-        draw_detailed_front_bbo(b)
+    #     draw_macro_refine_dreamplace_macro(b)
+    #     draw_detailed_refine_dreamplace_macro(b)
 
-        draw_macro_refine_bbo(b)
-        draw_detailed_refine_bbo(b)
+    #     #     draw_macro_front_bbo(b)
+    #     #     draw_detailed_front_bbo(b)
 
-    #     draw_front_dreamplace(b)
-    # draw_front_bbo("adaptec1")
-    # draw_front_dreamplace("adaptec1")
-    # draw_detailed("adaptec1")
-    # draw_front_dreamplace("adaptec1")
+    #     draw_macro_refine_bbo(b)
+    #     draw_detailed_refine_bbo(b)
+
+    # draw_area_dataflow(b)
+
+    # draw_detailed_front_bbo("bigblue4")
+    # draw_detailed_front_dreamplace_mixed("adaptec2")
+    # draw_detailed_refine_dreamplace_mixed("bigblue3")
+
+    draw_detailed_refine_dreamplace_macro("bigblue1")

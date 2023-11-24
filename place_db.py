@@ -3,7 +3,7 @@ import math
 import os
 import numpy as np
 
-from typing import Dict, Tuple
+from typing import Dict, List
 
 normal_set = {"adaptec1", "adaptec2", "bigblue1"}
 delete_set = {"adaptec3", "adaptec4", "bigblue3", "bigblue4"}
@@ -48,13 +48,23 @@ class Port:
         pass
 
 
+class Pin:
+    def __init__(self, direct: str, x_offset: float, y_offset: float) -> None:
+        self.direct = direct
+        self.x_offset = x_offset
+        self.y_offset = y_offset
+
+
+Net = Dict[str, List[Pin]]
+
+
 def read_node_file(fopen, grid_size):
     node_info: Dict[str, Node] = {}
     node_cnt = 0
     cell_area = 0
     for line in fopen.readlines():
         line = line.strip()
-        if line.startswith("o"):
+        if line.startswith("o") or line.startswith("p"):
             line = line.split()
             node_name = line[0]
             width = int(line[1])
@@ -71,57 +81,27 @@ def read_node_file(fopen, grid_size):
 
 
 def read_net_file(fopen, node_info):
-    net_info = {}
-    net_name = None
-    net_cnt = 0
+    net_info: Dict[str, Net] = {}
     pin_cnt = 0
     for line in fopen.readlines():
-        if (
-            not line.startswith("\t")
-            and not line.startswith("  ")
-            and not line.startswith("NetDegree")
-        ):
-            continue
-        line = line.strip().split()
-        if line[0] == "NetDegree":
-            net_name = line[-1]
-        else:
+        line: str = line.strip()
+        if line.startswith("NetDegree"):
+            net_name = line.split()[-1]
+        elif line.startswith("o"):
+            line = line.split()
             node_name = line[0]
-            node_direct = line[1]
+            pin_direct = line[1]
             if node_name in node_info:  # 只留 macro
                 pin_cnt += 1
                 if net_name not in net_info:
                     net_info[net_name] = {}
-                    net_info[net_name]["nodes"] = {}
-                    net_info[net_name]["ports"] = {}
-                if (
-                    not node_name.startswith("p")
-                    and node_name not in net_info[net_name]["nodes"]
-                ):
-                    x_offset = float(line[-2])
-                    y_offset = float(line[-1])
-                    net_info[net_name]["nodes"][node_name] = {
-                        "direct": node_direct,
-                        "x_offset": x_offset,
-                        "y_offset": y_offset,
-                    }
-                elif (
-                    node_name.startswith("p")
-                    and node_name in net_info[net_name]["ports"]
-                ):
-                    x_offset = float(line[-2])
-                    y_offset = float(line[-1])
-                    net_info[net_name]["ports"][node_name] = {
-                        "direct": node_direct,
-                        "x_offset": x_offset,
-                        "y_offset": y_offset,
-                    }
-    for net_name in list(net_info.keys()):
-        if len(net_info[net_name]["nodes"]) <= 1:
-            net_info.pop(net_name)
-    for net_name in net_info:
-        net_info[net_name]["id"] = net_cnt
-        net_cnt += 1
+                if node_name not in net_info[net_name]:
+                    net_info[net_name][node_name] = []
+                x_offset = float(line[-2])
+                y_offset = float(line[-1])
+                net_info[net_name][node_name].append(
+                    Pin(pin_direct, x_offset, y_offset)
+                )
     print("adjust net size = {}".format(len(net_info)))
     return net_info, pin_cnt
 
@@ -132,7 +112,8 @@ def read_pl_file(fopen, node_info: Dict[str, Node]):
     min_height = 999999
     min_width = 999999
     for line in fopen.readlines():
-        if line.startswith("o"):
+        line = line.strip()
+        if line.startswith("o") or line.startswith("p"):
             line = line.strip().split()
             node_name = line[0]
             bottom_left_x = int(line[1])
@@ -230,17 +211,34 @@ class PlaceDB:
                     self.port_to_delete.add(ni.name)
                     self.node_info.pop(ni.name)
                     self.node_cnt -= 1
+                # self.port_name.add(ni.name)
+                # self.port_cnt += 1
             else:
                 self.macro_name.add(ni.name)
         # 删除 net 所连接的被删除的 port
         for net_name in list(self.net_info):
-            for node_name in list(self.net_info[net_name]["nodes"]):
+            have_in = False
+            have_out = False
+            for node_name in list(self.net_info[net_name]):
                 if node_name in self.port_to_delete:
-                    self.net_info[net_name]["nodes"].pop(node_name)
-                    self.pin_cnt -= 1
-                    if len(self.net_info[net_name]) == 0:
-                        self.net_info.pop(net_name)
-                        self.net_cnt -= 1
+                    self.pin_cnt -= len(self.net_info[net_name][node_name])
+                    self.net_info[net_name].pop(node_name)
+                else:
+                    for pin in self.net_info[net_name][node_name]:
+                        if pin.direct == "I":
+                            have_in = True
+                        elif pin.direct == "O":
+                            have_out = True
+            if not (have_in and have_out) or (len(self.net_info[net_name]) == 0):
+                net_pin_num = sum(
+                    [
+                        len(self.net_info[net_name][node_name])
+                        for node_name in self.net_info[net_name]
+                    ]
+                )
+                self.pin_cnt -= net_pin_num
+                self.net_info.pop(net_name)
+                self.net_cnt -= 1
         return self.port_to_delete
 
     def is_port(self, node_name):
@@ -346,15 +344,18 @@ NumTerminals : 		{self.port_cnt}
     def write_nets_pure(self, file: str):
         with open(file, "a", encoding="utf8") as f:
             for net in self.net_info:
-                f.write(f"NetDegree : {len(self.net_info[net]['nodes'])} {net}\n")
-                for node in self.net_info[net]["nodes"]:
-                    f.write(
-                        f"\t{node} {self.net_info[net]['nodes'][node]['direct']} : {self.net_info[net]['nodes'][node]['x_offset']:.6f} {self.net_info[net]['nodes'][node]['y_offset']:.6f}\n"
-                    )
-                for port in self.net_info[net]["ports"]:
-                    f.write(
-                        f"\t{port} {self.net_info[net]['nodes'][port]['direct']} : {self.net_info[net]['ports'][port]['x_offset']:.6f} {self.net_info[net]['ports'][port]['y_offset']:.6f}\n"
-                    )
+                net_pin_num = sum(
+                    [
+                        len(self.net_info[net][node_name])
+                        for node_name in self.net_info[net]
+                    ]
+                )
+                f.write(f"NetDegree : {net_pin_num} {net}\n")
+                for node in self.net_info[net]:
+                    for pin in self.net_info[net][node]:
+                        f.write(
+                            f"\t{node} {pin.direct} : {pin.x_offset:.6f} {pin.y_offset:.6f}\n"
+                        )
 
     def write_nets(self, file: str):
         with open(file, "w", encoding="utf8") as f:
@@ -380,7 +381,10 @@ NumPins : {self.pin_cnt}
         self.r = np.sqrt(scale_factor * self.cell_area / np.pi)
         self.center_x = self.max_width / 2
         self.center_y = self.max_height / 2
-        self.L2 = (self.center_x - self.r) * self.r
+        if self.virtual_boundary:
+            self.L2 = (self.boundary_length / 2 - self.r) * self.r
+        else:
+            self.L2 = (self.center_x - self.r) * self.r
         # self.L2 = self.center_x * self.center_x
 
     def deal_virtual_boundary(self, scale_factor=1.25):
@@ -397,6 +401,20 @@ NumPins : {self.pin_cnt}
         self.top_boundary = min(
             self.max_height, self.center_y + self.boundary_length / 2
         )
+
+        if self.center_core:
+            self.L2 = (self.boundary_length / 2 - self.r) * self.r
+
+    def in_virtual_boundary(self, left_x, right_x, bottom_y, top_y):
+        if (
+            left_x >= self.left_boundary
+            and right_x <= self.right_boundary
+            and bottom_y >= self.bottom_boundary
+            and top_y <= self.top_boundary
+        ):
+            return True
+        else:
+            return False
 
 
 if __name__ == "__main__":

@@ -7,10 +7,11 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 from scipy.spatial import distance
 
 from common import my_inf
-from place_db import Node, PlaceDB
+from place_db import Node, PlaceDB, Net
 
 
 class Record:
@@ -66,10 +67,7 @@ def is_float(s):
 
 def normalize(x: np.ndarray) -> np.ndarray:
     std = np.std(x)
-    if abs(std) > 1e-5:
-        x = (x - np.average(x)) / std
-    else:
-        x = np.zeros_like(x)
+    x = (x - np.average(x)) / (std + 1e-6)
     return x
 
 
@@ -112,22 +110,25 @@ def rank_macros_area(placedb: PlaceDB) -> List[str]:
     # 将macro按照固定顺序（net面积总和）从大到小排列，输出排序后的macro序列。
     for net_name in placedb.net_info:
         sum_area = 0
-        for node_name in placedb.net_info[net_name]["nodes"].keys():
+        for node_name in placedb.net_info[net_name]:
             if not placedb.node_info[node_name].is_port:
                 sum_area += placedb.node_info[node_name].area
         placedb.net_info[net_name]["area"] = sum_area
 
     rank_area = {node_name: 0 for node_name in placedb.macro_name}
     for net_name in placedb.net_info:
-        for node_name in placedb.net_info[net_name]["nodes"].keys():
-            if not placedb.node_info[node_name].is_port:
-                rank_area[node_name] += placedb.net_info[net_name][
-                    "area"
-                ]  # 自己的面积被算了 #net 次？
-
+        for node_name in placedb.net_info[net_name]:
+            if (node_name != "area") and (not placedb.node_info[node_name].is_port):
+                # 自己的面积被算了 #net 次？
+                rank_area[node_name] += placedb.net_info[net_name]["area"]
+    # rank_area = {
+    #     node_name: placedb.node_info[node_name].area for node_name in placedb.macro_name
+    # }
     node_name_ls = sorted(placedb.port_name) + sorted(
         placedb.macro_name, key=lambda x: (rank_area[x], x), reverse=True
     )
+    for net_name in placedb.net_info:
+        placedb.net_info[net_name].pop("area")
     return node_name_ls
 
 
@@ -135,16 +136,16 @@ def rank_macros_mixed_port(
     placedb: PlaceDB, m2m_flow: M2MFlow, alpha=0.8, beta=0.2
 ) -> List[str]:
     # 将macro按照固定顺序（net面积总和）从大到小排列，输出排序后的macro序列。
-    for net_name in placedb.net_info:
-        sum = 0
-        for node_name in placedb.net_info[net_name]["nodes"].keys():
-            sum += placedb.node_info[node_name].area
-        placedb.net_info[net_name]["area"] = sum
+    # for net_name in placedb.net_info:
+    #     sum = 0
+    #     for node_name in placedb.net_info[net_name]:
+    #         sum += placedb.node_info[node_name].area
+    #     placedb.net_info[net_name]["area"] = sum
 
     rank_area = {node_name: 0 for node_name in placedb.macro_name}
     if alpha > 0:
         # for net_name in placedb.net_info:
-        #     for node_name in placedb.net_info[net_name]["nodes"].keys():
+        #     for node_name in placedb.net_info[net_name]:
         #         if node_name in rank_area:
         #             # 自己的面积被算了 #net 次？
         #             rank_area[node_name] += placedb.net_info[net_name]["area"]
@@ -185,20 +186,23 @@ def rank_macros_mixed(
     placedb: PlaceDB, m2m_flow: M2MFlow, alpha=0.8, beta=0.2
 ) -> List[str]:
     # 将macro按照固定顺序（net面积总和）从大到小排列，输出排序后的macro序列。
-    for net_name in placedb.net_info:
-        sum = 0
-        for node_name in placedb.net_info[net_name]["nodes"].keys():
-            sum += placedb.node_info[node_name].area
-        placedb.net_info[net_name]["area"] = sum
+    # for net_name in placedb.net_info:
+    #     sum = 0
+    #     for node_name in placedb.net_info[net_name]:
+    #         sum += placedb.node_info[node_name].area
+    #     placedb.net_info[net_name]["area"] = sum
 
     rank_area = {node_name: 0 for node_name in placedb.node_info}
     if alpha > 0:
-        for net_name in placedb.net_info:
-            for node_name in placedb.net_info[net_name]["nodes"].keys():
-                if node_name in rank_area:
-                    rank_area[node_name] += placedb.net_info[net_name][
-                        "area"
-                    ]  # 自己的面积被算了 #net 次？
+        # for net_name in placedb.net_info:
+        #     for node_name in placedb.net_info[net_name]:
+        #         if node_name in rank_area:
+        #             # 自己的面积被算了 #net 次？
+        #             rank_area[node_name] += placedb.net_info[net_name]["area"]
+        rank_area = {
+            node_name: placedb.node_info[node_name].area
+            for node_name in placedb.macro_name
+        }
         nomalize_list = np.array(list(rank_area.values()))
         aver = np.average(nomalize_list)
         std = np.std(nomalize_list)
@@ -227,43 +231,40 @@ def rank_macros_mixed(
     return node_name_ls
 
 
-def cal_hpwl(place_record: PlaceRecord, placedb) -> float:
+def cal_hpwl(place_record: PlaceRecord, placedb: PlaceDB) -> float:
     hpwl = 0
     net_hpwl = {}
-    for net_id in placedb.net_info.keys():
-        for node_id in placedb.net_info[net_id]["nodes"]:
-            if node_id in place_record.keys():
-                center_x = (
-                    place_record[node_id].center_x
-                    + placedb.net_info[net_id]["nodes"][node_id]["x_offset"]
-                )
-                center_y = (
-                    place_record[node_id].center_y
-                    + placedb.net_info[net_id]["nodes"][node_id]["y_offset"]
-                )
-                if net_id not in net_hpwl.keys():
-                    net_hpwl[net_id] = {
-                        "x_max": center_x,
-                        "x_min": center_x,
-                        "y_max": center_y,
-                        "y_min": center_y,
-                    }
-                else:
-                    if net_hpwl[net_id]["x_max"] < center_x:
-                        net_hpwl[net_id]["x_max"] = center_x
-                    elif net_hpwl[net_id]["x_min"] > center_x:
-                        net_hpwl[net_id]["x_min"] = center_x
-                    if net_hpwl[net_id]["y_max"] < center_y:
-                        net_hpwl[net_id]["y_max"] = center_y
-                    elif net_hpwl[net_id]["y_min"] > center_y:
-                        net_hpwl[net_id]["y_min"] = center_y
-    for net_id in net_hpwl.keys():
-        hpwl += (
-            net_hpwl[net_id]["x_max"]
-            - net_hpwl[net_id]["x_min"]
-            + net_hpwl[net_id]["y_max"]
-            - net_hpwl[net_id]["y_min"]
-        )
+    for net_name in placedb.net_info:
+        for node_name in placedb.net_info[net_name]:
+            if node_name in place_record:
+                for pin in placedb.net_info[net_name][node_name]:
+                    pin_x = place_record[node_name].center_x + pin.x_offset
+                    pin_y = place_record[node_name].center_y + pin.y_offset
+                    if net_name not in net_hpwl.keys():
+                        net_hpwl[net_name] = {
+                            "x_max": pin_x,
+                            "x_min": pin_x,
+                            "y_max": pin_y,
+                            "y_min": pin_y,
+                        }
+                    else:
+                        if net_hpwl[net_name]["x_max"] < pin_x:
+                            net_hpwl[net_name]["x_max"] = pin_x
+                        elif net_hpwl[net_name]["x_min"] > pin_x:
+                            net_hpwl[net_name]["x_min"] = pin_x
+                        if net_hpwl[net_name]["y_max"] < pin_y:
+                            net_hpwl[net_name]["y_max"] = pin_y
+                        elif net_hpwl[net_name]["y_min"] > pin_y:
+                            net_hpwl[net_name]["y_min"] = pin_y
+    hpwl = sum(
+        [
+            net_hpwl[net_name]["x_max"]
+            - net_hpwl[net_name]["x_min"]
+            + net_hpwl[net_name]["y_max"]
+            - net_hpwl[net_name]["y_min"]
+            for net_name in net_hpwl
+        ]
+    )
     return hpwl
 
 
@@ -319,12 +320,42 @@ def cal_pos_regularity(left_x, right_x, bottom_y, top_y, node_name, placedb: Pla
         (center_x, center_y), (placedb.center_x, placedb.center_y)
     )
     if dist > placedb.r:
-        regu = min(
-            abs(left_x - placedb.left_boundary),
-            abs(placedb.right_boundary - right_x),
-            abs(bottom_y - placedb.bottom_boundary),
-            abs(placedb.top_boundary - top_y),
-        )
+        if placedb.in_virtual_boundary(left_x, right_x, bottom_y, top_y):
+            regu = min(
+                abs(left_x - placedb.left_boundary),
+                abs(placedb.right_boundary - right_x),
+                abs(bottom_y - placedb.bottom_boundary),
+                abs(placedb.top_boundary - top_y),
+            )
+        elif (
+            (left_x <= placedb.left_boundary or right_x >= placedb.right_boundary)
+            and top_y <= placedb.top_boundary
+            and bottom_y >= placedb.bottom_boundary
+        ):  # left/right - mid
+            regu = min(
+                abs(placedb.left_boundary - left_x),
+                abs(right_x - placedb.right_boundary),
+            )
+        elif (
+            (bottom_y <= placedb.bottom_boundary or top_y >= placedb.top_boundary)
+            and left_x >= placedb.left_boundary
+            and right_x <= placedb.right_boundary
+        ):  # mid - bottom/top
+            regu = min(
+                abs(placedb.bottom_boundary - bottom_y),
+                abs(top_y - placedb.top_boundary),
+            )
+        else:
+            regu = max(
+                min(
+                    abs(left_x - placedb.left_boundary),
+                    abs(placedb.right_boundary - right_x),
+                ),
+                min(
+                    abs(bottom_y - placedb.bottom_boundary),
+                    abs(placedb.top_boundary - top_y),
+                ),
+            )
     else:
         regu = placedb.L2 / (dist + 1e-5)
     return regu
@@ -371,17 +402,17 @@ def cal_datamask(
     return data_mask
 
 
-def draw_position_mask(position_mask: np.ndarray):
-    from PIL import Image
-
-    table = [0] + [1] * 255
-    pic = Image.fromarray(np.flip(position_mask, 0), mode="L").point(table, "1")
-    pic.save("position_mask.png")
-    pic.close()
+def draw_mask(mask: np.ndarray):
+    sns.heatmap(np.flip(mask.T, 0), annot=False)
+    plt.savefig("position_mask.png")
+    plt.close()
 
 
 def cal_positionmask(
-    node_name1: str, placedb: PlaceDB, place_record: PlaceRecord, grid_num
+    node_name1: str,
+    placedb: PlaceDB,
+    place_record: PlaceRecord,
+    grid_num,  # , draw=False
 ):
     scaled_width = placedb.node_info[node_name1].scaled_width
     scaled_height = placedb.node_info[node_name1].scaled_height
@@ -403,6 +434,9 @@ def cal_positionmask(
         )
 
         position_mask[bottom_left_x:top_right_x, bottom_left_y:top_right_y] = False
+        # if draw and (node_name1 == "o451617" or node_name1 == "o450928"):
+        #     draw_mask(position_mask)
+        # pass
         # draw_position_mask(position_mask)
     return position_mask
 
@@ -509,30 +543,38 @@ def datamask_placer(
 
 
 def cal_wiremask(
-    node_id, placedb: PlaceDB, grid_num, grid_size, net_ls, hpwl_info_for_each_net
+    node_name,
+    placedb: PlaceDB,
+    grid_num,
+    grid_size,
+    net_ls: Dict[str, Net],
+    hpwl_info_for_each_net,
 ):
     wire_mask = np.zeros((grid_num, grid_num))
-    for net_id in net_ls.keys():
-        if net_id in hpwl_info_for_each_net.keys():
-            x_offset = (
-                net_ls[net_id]["nodes"][node_id]["x_offset"]
-                + 0.5 * placedb.node_info[node_id].width
-            )
-            y_offset = (
-                net_ls[net_id]["nodes"][node_id]["y_offset"]
-                + 0.5 * placedb.node_info[node_id].height
-            )
-            for col in range(grid_num):
-                x_co = col * grid_size + x_offset
-                y_co = col * grid_size + y_offset
-                if x_co < hpwl_info_for_each_net[net_id]["x_min"]:
-                    wire_mask[col, :] += hpwl_info_for_each_net[net_id]["x_min"] - x_co
-                elif x_co > hpwl_info_for_each_net[net_id]["x_max"]:
-                    wire_mask[col, :] += x_co - hpwl_info_for_each_net[net_id]["x_max"]
-                if y_co < hpwl_info_for_each_net[net_id]["y_min"]:
-                    wire_mask[:, col] += hpwl_info_for_each_net[net_id]["y_min"] - y_co
-                elif y_co > hpwl_info_for_each_net[net_id]["y_max"]:
-                    wire_mask[:, col] += y_co - hpwl_info_for_each_net[net_id]["y_max"]
+    for net_name in net_ls.keys():
+        if net_name in hpwl_info_for_each_net.keys():
+            for pin in net_ls[net_name][node_name]:
+                x_offset = pin.x_offset + 0.5 * placedb.node_info[node_name].width
+                y_offset = pin.y_offset + 0.5 * placedb.node_info[node_name].height
+                for col in range(grid_num):
+                    x_co = col * grid_size + x_offset
+                    y_co = col * grid_size + y_offset
+                    if x_co < hpwl_info_for_each_net[net_name]["x_min"]:
+                        wire_mask[col, :] += (
+                            hpwl_info_for_each_net[net_name]["x_min"] - x_co
+                        )
+                    elif x_co > hpwl_info_for_each_net[net_name]["x_max"]:
+                        wire_mask[col, :] += (
+                            x_co - hpwl_info_for_each_net[net_name]["x_max"]
+                        )
+                    if y_co < hpwl_info_for_each_net[net_name]["y_min"]:
+                        wire_mask[:, col] += (
+                            hpwl_info_for_each_net[net_name]["y_min"] - y_co
+                        )
+                    elif y_co > hpwl_info_for_each_net[net_name]["y_max"]:
+                        wire_mask[:, col] += (
+                            y_co - hpwl_info_for_each_net[net_name]["y_max"]
+                        )
     return wire_mask
 
 
@@ -541,30 +583,31 @@ def update_info(
     placedb: PlaceDB,
     bottom_left_x,
     bottom_left_y,
-    net_ls,
+    net_ls: Dict[str, Net],
     hpwl_info_for_each_net,
 ):
     center_loc_x = bottom_left_x + 0.5 * placedb.node_info[node_name].width
     center_loc_y = bottom_left_y + 0.5 * placedb.node_info[node_name].height
-    for net_id in net_ls.keys():
-        x_offset = net_ls[net_id]["nodes"][node_name]["x_offset"]
-        y_offset = net_ls[net_id]["nodes"][node_name]["y_offset"]
-        if net_id not in hpwl_info_for_each_net.keys():
-            hpwl_info_for_each_net[net_id] = {
-                "x_max": center_loc_x + x_offset,
-                "x_min": center_loc_x + x_offset,
-                "y_max": center_loc_y + y_offset,
-                "y_min": center_loc_y + y_offset,
-            }
-        else:
-            if hpwl_info_for_each_net[net_id]["x_max"] < center_loc_x + x_offset:
-                hpwl_info_for_each_net[net_id]["x_max"] = center_loc_x + x_offset
-            elif hpwl_info_for_each_net[net_id]["x_min"] > center_loc_x + x_offset:
-                hpwl_info_for_each_net[net_id]["x_min"] = center_loc_x + x_offset
-            if hpwl_info_for_each_net[net_id]["y_max"] < center_loc_y + y_offset:
-                hpwl_info_for_each_net[net_id]["y_max"] = center_loc_y + y_offset
-            elif hpwl_info_for_each_net[net_id]["y_min"] > center_loc_y + y_offset:
-                hpwl_info_for_each_net[net_id]["y_min"] = center_loc_y + y_offset
+    for net_name in net_ls.keys():
+        for pin in net_ls[net_name][node_name]:
+            x_offset = pin.x_offset + center_loc_x
+            y_offset = pin.y_offset + center_loc_y
+            if net_name not in hpwl_info_for_each_net.keys():
+                hpwl_info_for_each_net[net_name] = {
+                    "x_max": x_offset,
+                    "x_min": x_offset,
+                    "y_max": y_offset,
+                    "y_min": y_offset,
+                }
+            else:
+                if hpwl_info_for_each_net[net_name]["x_max"] < x_offset:
+                    hpwl_info_for_each_net[net_name]["x_max"] = x_offset
+                elif hpwl_info_for_each_net[net_name]["x_min"] > x_offset:
+                    hpwl_info_for_each_net[net_name]["x_min"] = x_offset
+                if hpwl_info_for_each_net[net_name]["y_max"] < y_offset:
+                    hpwl_info_for_each_net[net_name]["y_max"] = y_offset
+                elif hpwl_info_for_each_net[net_name]["y_min"] > y_offset:
+                    hpwl_info_for_each_net[net_name]["y_min"] = y_offset
     return hpwl_info_for_each_net
 
 
@@ -584,8 +627,8 @@ def wiremask_placer(
     N2_time = 0
     for node_name in node_name_ls:
         net_ls = {}
-        for net_id in placedb.net_info.keys():
-            if node_name in placedb.net_info[net_id]["nodes"].keys():
+        for net_id in placedb.net_info:
+            if node_name in placedb.net_info[net_id]:
                 net_ls[net_id] = placedb.net_info[net_id]
         if placedb.node_info[node_name].is_port:
             new_place_record[node_name] = place_record[node_name]
@@ -668,30 +711,30 @@ def mixed_placer(
     gamma=0.1,
 ):
     alpha, beta, gamma = l1_normalize([alpha, beta, gamma])
-    new_place_record: PlaceRecord = {}
+    place_record_new: PlaceRecord = {}
     hpwl_info_for_each_net = {}
     total_regu_mask = {}
 
     for node_name in node_name_ls:
         if alpha > 0:
             net_ls = {}
-            for net_id in placedb.net_info.keys():
-                if node_name in placedb.net_info[net_id]["nodes"].keys():
+            for net_id in placedb.net_info:
+                if node_name in placedb.net_info[net_id]:
                     net_ls[net_id] = placedb.net_info[net_id]
         if placedb.node_info[node_name].is_port:
-            new_place_record[node_name] = place_record[node_name]
+            place_record_new[node_name] = place_record[node_name]
             bottom_left_x = placedb.node_info[node_name].bottom_left_x
             bottom_left_y = placedb.node_info[node_name].bottom_left_y
         else:
             # print(node_name, end=", ")
             position_mask = cal_positionmask(
-                node_name, placedb, new_place_record, grid_num
+                node_name, placedb, place_record_new, grid_num
             )
             if not np.any(position_mask):
                 print(f"\n{node_name}\tno_legal_place")
                 # for node in new_place_record.values():
                 #     print(node.name, node.scaled_width, node.scaled_height)
-                return new_place_record, False
+                return place_record_new, False
 
             if alpha > 0:
                 wiremask = cal_wiremask(
@@ -711,7 +754,7 @@ def mixed_placer(
                     placedb,
                     grid_num,
                     grid_size,
-                    new_place_record,
+                    place_record_new,
                     place_record,
                     m2m_flow,
                 )
@@ -732,7 +775,7 @@ def mixed_placer(
             )
             bottom_left_x = grid_size * chosen_loc_x
             bottom_left_y = grid_size * chosen_loc_y
-            new_place_record[node_name] = Record(
+            place_record_new[node_name] = Record(
                 node_name,
                 placedb.node_info[node_name].width,
                 placedb.node_info[node_name].height,
@@ -752,7 +795,7 @@ def mixed_placer(
                 hpwl_info_for_each_net,
             )
 
-    return new_place_record, True
+    return place_record_new, True
 
 
 def write_final_placement(best_placed_macro: PlaceRecord, best_hpwl, dir):
@@ -777,7 +820,7 @@ def draw_regularity(ax, placedb: PlaceDB):
             patches.Circle(
                 (0.5, 0.5),
                 placedb.r / placedb.max_width,
-                linewidth=1,
+                linewidth=0.5,
                 edgecolor="orange",
                 fill=False,
             )
@@ -791,7 +834,7 @@ def draw_regularity(ax, placedb: PlaceDB):
                 ),
                 (placedb.boundary_length) / placedb.max_width,
                 (placedb.boundary_length) / placedb.max_height,
-                linewidth=1,
+                linewidth=0.5,
                 edgecolor="red",
                 fill=False,
             )

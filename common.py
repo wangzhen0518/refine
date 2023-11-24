@@ -8,7 +8,17 @@ grid_setting = {
     "bigblue3": {"grid_num": 234, "grid_size": 119},
     # "bigblue3": {"grid_num": 929, "grid_size": 30},
     "bigblue4": {"grid_num": 272, "grid_size": 119},
-    "ariane": {"grid_num": 357, "grid_size": 1},
+    "superblue2": {"grid_num": 161, "grid_size": 72},
+    "superblue3": {"grid_num": 161, "grid_size": 72},
+    "superblue6": {"grid_num": 161, "grid_size": 72},
+    "superblue7": {"grid_num": 161, "grid_size": 72},
+    "superblue9": {"grid_num": 161, "grid_size": 72},
+    "superblue11": {"grid_num": 161, "grid_size": 72},
+    "superblue12": {"grid_num": 161, "grid_size": 72},
+    "superblue14": {"grid_num": 161, "grid_size": 72},
+    "superblue16": {"grid_num": 161, "grid_size": 72},
+    "superblue18": {"grid_num": 161, "grid_size": 72},
+    "superblue19": {"grid_num": 161, "grid_size": 72},
 }
 
 shift_factor = {
@@ -26,15 +36,16 @@ my_inf = 1e12
 
 method_list = [
     "bbo",
-    "dreamplace-mixed",
+    # "dreamplace-mixed",
+    "dreamplace-macro",
 ]
 
 benchmark_list = [
-    "adaptec1",
-    "adaptec2",
-    "adaptec3",
-    "adaptec4",
+    # "adaptec1",
+    # "adaptec2",
+    # "adaptec3",
+    # "adaptec4",
     "bigblue1",
-    "bigblue3",
-    "bigblue4",
+    # "bigblue3",
+    # "bigblue4",
 ]

@@ -26,9 +26,10 @@ def conclude(method_list: List[str], benchmark_list: List[str]):
             df_congestion.loc[method, benchmark] = overflow
 
             alpha, beta, gamma = eval(best_hyperparameters.loc[method, benchmark])
-            pivot = str(int(10 * alpha)) + str(int(10 * beta)) + str(int(10 * gamma))
+            # pivot = str(int(10 * alpha)) + str(int(10 * beta)) + str(int(10 * gamma))
+            pivot = str(alpha) + str(beta) + str(gamma)
             refine_filename = os.path.join(
-                f"results_v7_grid_search_{pivot}",
+                f"results_v11_grid_search_{pivot}",
                 f"results_detailed_refine-EA_{method}",
                 benchmark,
                 "result.log",

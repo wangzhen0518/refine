@@ -114,13 +114,18 @@ def place(params):
         pl_file = f"./results_macro_front_dreamplace-mixed/{params.design_name()}/{params.design_name()}.gp.pl"
         read_dreamplace_pl_file(placedb, pl_file, params.shift_factor)
     else:
-        if params.type == "front" and params.method == "bbo":
-            pl_file = f"./results_macro_front_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
+        if params.type == "front":
+            if params.method == "bbo":
+                pl_file = f"./results_macro_front_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
+            elif params.method == "dreamplace-macro":
+                pl_file = f"./results_macro_front_dreamplace-macro/{params.design_name()}/{params.design_name()}.gp.pl"
         elif params.type == "refine":
             if params.method == "bbo":
                 pl_file = f"./results_macro_refine-EA_bbo/{params.design_name()}/{params.design_name()}.gp.pl"
             elif params.method == "dreamplace-mixed":
                 pl_file = f"./results_macro_refine-EA_dreamplace-mixed/{params.design_name()}/{params.design_name()}.gp.pl"
+            elif params.method == "dreamplace-macro":
+                pl_file = f"./results_macro_refine-EA_dreamplace-macro/{params.design_name()}/{params.design_name()}.gp.pl"
             else:
                 raise NotImplementedError
         else:

@@ -131,6 +131,9 @@ class PlaceDB : public DefParser::DefDataBase
         string2index_map_type const& nodeName2Index() const {return m_mNodeName2Index;}
         string2index_map_type& nodeName2Index() {return m_mNodeName2Index;}
 
+        string2index_map_type const& netName2Index() const {return m_mNetName2Index;}
+        string2index_map_type& netName2Index() {return m_mNetName2Index;}
+
         std::size_t numMovable() const {return m_numMovable;}
         std::size_t numFixed() const {return m_numFixed;}
         std::size_t numMacro() const {return m_numMacro;}

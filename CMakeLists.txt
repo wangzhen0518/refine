@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.14)
 
 project(DREAMPlace LANGUAGES CXX)
+set(CMAKE_DEPENDS_IN_PROJECT_ONLY ON)
 set(CMAKE_VERBOSE_MAKEFILE ON)
-
+set(Python_EXECUTABLE $ENV{CONDA_PREFIX}/bin/python) #!TODO
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set (CMAKE_INSTALL_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/install" CACHE PATH "Prefix prepended to install directories" FORCE )
 endif()
@@ -139,7 +140,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/dreamplace/configure.py.in ${CMAKE_CU
 add_subdirectory(thirdparty)
 add_subdirectory(dreamplace)
 # add_subdirectory(unittest)
-add_subdirectory(benchmarks)
+# add_subdirectory(benchmarks)
 add_subdirectory(test)
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dreamplace/configure.py DESTINATION dreamplace)

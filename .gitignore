@@ -7,24 +7,27 @@ dreamplace.egg-info
 *obj*
 # *dist*
 *.so
-configure.*
 test.*
-*.svg
-*.png
+# *.svg
+# *.png
 
 .vscode/
 __pycache__/
 build/
 bin/
 lib/
+build_ori/
 res/
-log/
+# log/
 install/
-benchmarks/
-tmp/
-results/
+bin/
 include/
+*results*/
+*benchmarks*/
+test/
 # thirdparty/
+tmp/
 
 .DS_Store
-dreamplace/ops/place_io/mytest
+configure.py
+mytest
